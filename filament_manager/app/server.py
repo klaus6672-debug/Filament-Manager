@@ -309,6 +309,8 @@ def build_ams(states, conn):
                 continue
             if live["empty"]:
                 entry["status"] = "gone" if spool else "empty"
+                if spool:
+                    entry["action"] = {"kind": "park", "label": "Spule ins Lager", "bulk": False}
                 continue
             tag_owner = by_tag.get(live["tag_uid"]) if live["tag_uid"] else None
             if tag_owner and tag_owner["slot"] == slot:
@@ -483,8 +485,9 @@ def summary(low: int = 100):
 
 class AmsApplyIn(BaseModel):
     slot: str = Field(pattern=r"^AMS-[1-3]-[1-4]$")
-    kind: str = Field(pattern=r"^(learn|move|create|fixmat)$")
+    kind: str = Field(pattern=r"^(learn|move|create|fixmat|park)$")
     from_slot: str | None = Field(default=None, pattern=r"^[A-Za-z0-9_-]{1,32}$")
+    park_old: bool = False  # nur bei "create": die bisherige Spule im AMS-Slot zuerst ins Hauptlager legen
 
 
 class AmsMapIn(BaseModel):
@@ -498,6 +501,15 @@ def _live_tray(slot, conn):
     unit, pos = (int(x) for x in AMS_SLOT_RE.match(slot).groups())
     name = ams_mapping(conn, list(units)).get(unit)
     return units.get(name, {}).get(pos)
+
+
+PARK_AREAS = (("D", 12), ("H", 120))  # zuerst Lager D (angefangene Spulen), wenn voll das Hauptlager
+
+
+def _free_storage_slot(conn):
+    """Erster freier Platz zum Auslagern: Lager D0 … D11, danach Hauptlager H0 … H119."""
+    used = {r["slot"] for r in conn.execute("SELECT slot FROM filaments").fetchall()}
+    return next((f"{p}{i}" for p, n in PARK_AREAS for i in range(n) if f"{p}{i}" not in used), None)
 
 
 def _clear_tag(conn, tag, keep_slot):
@@ -516,12 +528,25 @@ def ams_status():
 
 @app.post("/api/ams/apply")
 def ams_apply(item: AmsApplyIn):
+    parked_to = None
     try:
         with db() as conn:
             live = _live_tray(item.slot, conn)
+            target = conn.execute("SELECT * FROM filaments WHERE slot=?", (item.slot,)).fetchone()
+
+            if item.kind == "park":  # Fach ist leer, die App führt noch eine Spule: ins Hauptlager räumen
+                if not target:
+                    return JSONResponse({"error": "Der Slot ist bereits leer."}, status_code=409)
+                if live and not live["empty"]:
+                    return JSONResponse({"error": "Im Fach steckt laut AMS eine Spule."}, status_code=409)
+                parked_to = _free_storage_slot(conn)
+                if not parked_to:
+                    return JSONResponse({"error": "Lager D und Hauptlager sind voll."}, status_code=409)
+                conn.execute("UPDATE filaments SET slot=? WHERE slot=?", (parked_to, item.slot))
+                return {"ok": True, "parked_to": parked_to}
+
             if not live or live["empty"]:
                 return JSONResponse({"error": "Das Fach ist laut AMS leer oder nicht verbunden."}, status_code=409)
-            target = conn.execute("SELECT * FROM filaments WHERE slot=?", (item.slot,)).fetchone()
 
             if item.kind == "learn":
                 if not target or not live["tag_uid"]:
@@ -551,8 +576,13 @@ def ams_apply(item: AmsApplyIn):
                     conn.execute("UPDATE filaments SET tag_uid=? WHERE slot=?", (live["tag_uid"], item.slot))
 
             else:  # create
-                if target:
+                if target and not item.park_old:
                     return JSONResponse({"error": "Der Slot ist bereits belegt."}, status_code=409)
+                if target:  # bisherige Spule zuerst ins Hauptlager
+                    parked_to = _free_storage_slot(conn)
+                    if not parked_to:
+                        return JSONResponse({"error": "Lager D und Hauptlager sind voll."}, status_code=409)
+                    conn.execute("UPDATE filaments SET slot=? WHERE slot=?", (parked_to, item.slot))
                 info = describe_live(live)
                 if live["tag_uid"]:
                     _clear_tag(conn, live["tag_uid"], item.slot)
@@ -570,7 +600,7 @@ def ams_apply(item: AmsApplyIn):
                 )
     except AmsUnavailable as e:
         return JSONResponse({"error": str(e)}, status_code=503)
-    return {"ok": True}
+    return {"ok": True, "parked_to": parked_to}
 
 
 @app.post("/api/ams/map")

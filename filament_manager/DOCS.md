@@ -30,6 +30,7 @@ Pro AMS-Fach steht, was der Drucker meldet (Material, Farbe), daneben die Spule,
 - **Kennung merken:** Passt die Spule, speichert die App die RFID-Kennung der Bambu-Spule.
 - **Steckt jetzt hier:** Eine Spule mit bekannter Kennung wurde in ein anderes Fach gesteckt. Ein Klick verschiebt sie (ist das Fach belegt, tauschen beide Spulen die Plätze).
 - **Weicht ab / Nicht in der App:** Die App schlägt passende Spulen aus Regal oder Lager vor (gleiches Material, ähnliche Farbe) oder legt die Spule aus den Live-Daten neu an.
+- **Ausgebaute Spulen** legt die App automatisch ins **Lager D** (12 Plätze für angefangene Spulen), bei vollem Lager D ins Hauptlager.
 - **Vorschläge übernehmen** führt alle eindeutigen Vorschläge nach Rückfrage aus. Es wird nie etwas ohne deinen Klick geändert.
 - Spulen ohne RFID (Fremdhersteller) werden über Material und Farbe verglichen. Das Restgewicht übernimmt die App nicht, die P1S-AMS melden es nicht.
 

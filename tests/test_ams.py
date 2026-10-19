@@ -174,3 +174,31 @@ def test_basic_and_matte_are_never_treated_as_identical(client):
     put(client, "AMS-3-2", "PLA Basic", "#ffffff")
     t = tray(client, "AMS-3-2")
     assert t["status"] == "mismatch" and all(c["slot"] != "A9" for c in t["candidates"])
+
+
+def test_old_spool_goes_to_main_storage_when_slot_is_replaced_or_emptied(client):
+    # Fach 3-1 ist laut AMS leer, die App führt noch eine Spule -> Vorschlag "ins Lager", aber nicht in der Sammelübernahme
+    put(client, "AMS-3-1", "PLA", "#dcf478", manufacturer="Kexcelled")
+    put(client, "H0", "PETG", "#111111")
+    t = tray(client, "AMS-3-1")
+    assert t["status"] == "gone" and t["action"] == {"kind": "park", "label": "Spule ins Lager", "bulk": False}
+    r = client.post("/api/ams/apply", json={"slot": "AMS-3-1", "kind": "park"}).json()
+    assert r["parked_to"] == "D0"                                           # angefangene Spulen kommen in Lager D
+    s = client.get("/api/slots").json()["slots"]
+    assert "AMS-3-1" not in s and s["D0"]["manufacturer"] == "Kexcelled" and "H0" in s
+    assert client.post("/api/ams/apply", json={"slot": "AMS-3-1", "kind": "park"}).status_code == 409
+
+    # Neue, unbekannte Spule im belegten Fach: "Neu anlegen" nur mit Auslagerung der alten
+    put(client, "AMS-1-3", "PLA", "#123456", manufacturer="Alt", color_name="Alte Spule")
+    assert client.post("/api/ams/apply", json={"slot": "AMS-1-3", "kind": "create"}).status_code == 409
+    r = client.post("/api/ams/apply", json={"slot": "AMS-1-3", "kind": "create", "park_old": True}).json()
+    s = client.get("/api/slots").json()["slots"]
+    assert r["parked_to"] == "D1" and s["D1"]["color_name"] == "Alte Spule" and s["AMS-1-3"]["color_name"] == "SalbeiGrün"
+
+
+def test_falls_back_to_main_storage_when_lager_d_is_full(client):
+    for i in range(12):
+        put(client, f"D{i}", "PLA", "#222222")
+    put(client, "H0", "PLA", "#222222")
+    put(client, "AMS-3-1", "PLA", "#dcf478")
+    assert client.post("/api/ams/apply", json={"slot": "AMS-3-1", "kind": "park"}).json()["parked_to"] == "H1"

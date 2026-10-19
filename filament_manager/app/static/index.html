@@ -336,6 +336,7 @@ button.csvimport{ background:linear-gradient(180deg, #7f8c8d, #667172); }
 
 .grid-a{grid-template-columns:repeat(6, minmax(95px,1fr))}
 .grid-b,.grid-c{grid-template-columns:repeat(3, minmax(95px,1fr))}
+.grid-d{grid-template-columns:repeat(6, minmax(95px,1fr))}
 .grid-main{grid-template-columns:repeat(9, minmax(95px,1fr))}
 .grid-ams{grid-template-columns:repeat(4, minmax(95px,1fr))}
 .slot{
@@ -581,7 +582,7 @@ button.csvimport{ background:linear-gradient(180deg, #7f8c8d, #667172); }
         justify-content:center;
     }
 
-    .grid-b,.grid-c{
+    .grid-b,.grid-c,.grid-d{
         grid-template-columns:repeat(2,1fr);
         justify-content:center;
     }
@@ -771,7 +772,7 @@ letter-spacing:1px;
                     </div>
                     <div class="kpi">
                         <div class="kpi-label">Slots gesamt</div>
-                        <div class="kpi-value">150</div>
+                        <div class="kpi-value">162</div>
                     </div>
                     <div class="kpi">
                         <div class="kpi-label">Spulen</div>
@@ -783,7 +784,7 @@ letter-spacing:1px;
                     </div>
                 </div>
 
-                <div class="hint">Seite 1 enthält Regal A, B, C und 3 AMS. Seite 2 enthält das Hauptlager.</div>
+                <div class="hint">Seite 1 enthält Regal A, B, C, Lager D (angefangene Spulen) und 3 AMS. Seite 2 enthält das Hauptlager.</div>
                 <div class="hint">Aktueller Slot: <strong id="currentSlot">–</strong></div>
             </div>
         </div>
@@ -821,6 +822,16 @@ letter-spacing:1px;
                 </div>
                 <div id="gridC" class="grid grid-c"></div>
             </div>
+        </div>
+
+        <div class="wood-rack">
+            <div class="rack-head">
+                <div>
+                    <div class="rack-title">Lager D · Angefangene Spulen</div>
+                    <div class="rack-sub">12 Plätze · hierhin räumt der AMS-Abgleich ausgebaute Spulen</div>
+                </div>
+            </div>
+            <div id="gridD" class="grid grid-d"></div>
         </div>
 
         <div class="ams-wrap">
@@ -2476,7 +2487,7 @@ function renderAms(data){
 
             let act = "";
             if(t.action){
-                open++;
+                if(t.action.bulk !== false) open++;
                 act += `<button type="button" onclick="applyAms('${t.slot}','${t.action.kind}','${amsEsc(t.action.from_slot || "")}')">${amsEsc(t.action.label)}</button>`;
             }
             if(t.candidates && t.candidates.length){
@@ -2487,7 +2498,9 @@ function renderAms(data){
             if(t.status === "missing"){
                 act += `<button type="button" onclick="applyAms('${t.slot}','create','')">Neu anlegen</button>`;
             }
-            if(t.status === "gone") act += `<span class="pos">Spule in der App entfernen oder umlagern</span>`;
+            if(t.status === "mismatch"){
+                act += `<button type="button" onclick="applyAms('${t.slot}','create','',true)" title="Die bisherige Spule dieses Fachs kommt automatisch ins Lager D (angefangene Spulen)">Neu anlegen, alte → Lager D</button>`;
+            }
 
             html += `<div class="ams-row">
                 <div class="ams-spool"><div><div class="pos">Live · Fach ${t.pos}</div>${liveHtml}</div></div>
@@ -2514,11 +2527,14 @@ async function loadAms(){
     }
 }
 
-async function applyAms(slot, kind, fromSlot){
+async function applyAms(slot, kind, fromSlot, parkOld){
     const body = {slot, kind};
     if(fromSlot) body.from_slot = fromSlot;
+    if(parkOld) body.park_old = true;
+    if((kind === "park" || parkOld) && !confirm("Die bisherige Spule von " + slot + " wird automatisch ins Lager D (angefangene Spulen) gelegt. Fortfahren?")) return false;
     const {ok, data} = await apiSend("POST", "api/ams/apply", body);
     if(!ok){ alert(data.error || "Übernehmen fehlgeschlagen."); return false; }
+    if(data.parked_to) alert("Die bisherige Spule liegt jetzt im Lager: " + data.parked_to);
     window.location.reload();
     return true;
 }
@@ -2527,7 +2543,7 @@ async function applyAllAms(){
     if(!amsData) return;
     const jobs = [];
     amsData.units.forEach(u => u.trays.forEach(t => {
-        if(t.action) jobs.push({slot: t.slot, kind: t.action.kind, from_slot: t.action.from_slot || "", label: t.slot + ": " + t.action.label});
+        if(t.action && t.action.bulk !== false) jobs.push({slot: t.slot, kind: t.action.kind, from_slot: t.action.from_slot || "", label: t.slot + ": " + t.action.label});
     }));
     if(!jobs.length) return;
     if(!confirm("Folgendes übernehmen?\n\n" + jobs.map(j => "• " + j.label).join("\n"))) return;
@@ -2556,6 +2572,7 @@ document.getElementById("kpiWeight").textContent = weight + " g";
 buildSlots("gridA", "A", 18);
 buildSlots("gridB", "B", 6);
 buildSlots("gridC", "C", 6);
+buildSlots("gridD", "D", 12);
 slotsDataSorted = sortSlotsByMaterialAndColor(slotsData);
 buildSortedStorage("gridH", "H", 120);
 buildAMS("gridAMS1", 1);

@@ -1,6 +1,6 @@
 # Filament Manager
 
-Filamentlager mit Regal-Ansicht (Regal A/B/C, 3× AMS, Hauptlager), QR-Labels als PDF, Barcode-/QR-Scan mit der Kamera,
+Filamentlager mit Regal-Ansicht (Regal A/B/C, Lager D für angefangene Spulen, 3× AMS, Hauptlager), QR-Labels als PDF, Barcode-/QR-Scan mit der Kamera,
 Statistik und CSV-Import/-Export. Läuft als **installierbare App auf Handy und PC** (PWA), als **Docker-Container** und
 als **Home-Assistant-Add-on**. Die Daten liegen in einer SQLite-Datei (`filament.db`) auf deinem eigenen Rechner.
 
