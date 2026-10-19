@@ -8,6 +8,9 @@ services:
     environment:
       FMT_USER: ${FMT_USER:-fmt}
       FMT_PASSWORD: ${FMT_PASSWORD:?Bitte FMT_PASSWORD in der Datei .env setzen}
+      # Optional: AMS-Live-Abgleich mit Home Assistant (Adresse z. B. http://192.168.178.50:8123, Langzeit-Zugriffstoken)
+      HA_URL: ${HA_URL:-}
+      HA_TOKEN: ${HA_TOKEN:-}
     volumes:
       # Hier liegt filament.db (Datenbank). Bestehende Datenbank einfach hineinkopieren.
       - ${FILAMENT_DATA:-./data}:/data

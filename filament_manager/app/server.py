@@ -7,6 +7,9 @@ Liefert die App (static/) aus und stellt eine kleine JSON-API bereit:
     POST   /api/move           Spule in leeren Slot verschieben
     DELETE /api/slots/{slot}   Slot leeren
     GET    /api/summary        Kennzahlen für Home Assistant (?low=100 = Grenze für "knapp" in Gramm)
+    GET    /api/ams            Live-Abgleich: AMS-Fächer aus Home Assistant gegen die Slots AMS-n-m
+    POST   /api/ams/apply      Abgleich-Vorschlag übernehmen (Kennung merken / verschieben / neu anlegen)
+    POST   /api/ams/map        Zuordnung "AMS n der App" -> "AMS in Home Assistant" speichern
     GET    /api/health         Lebenszeichen (immer ohne Passwort erreichbar)
 
 Konfiguration über Umgebungsvariablen:
@@ -14,14 +17,19 @@ Konfiguration über Umgebungsvariablen:
     FILAMENT_IMPORT_DB  Pfad zu einer vorhandenen filament.db, die beim allerersten Start übernommen wird
     FMT_PASSWORD        Optional: schützt App und API per Benutzername/Passwort (HTTP Basic)
     FMT_USER            Benutzername (Standard: fmt)
+    HA_URL, HA_TOKEN    Nur außerhalb des HA-Add-ons: Adresse und Langzeit-Zugriffstoken von Home Assistant
+                        (im Add-on wird stattdessen automatisch der Supervisor-Zugang genutzt)
     FMT_TRUSTED_IPS     Kommagetrennte Absender-IPs, die ohne Passwort durchgelassen werden
                         (Home-Assistant-Add-on: der Ingress-Zugang des Supervisors, 172.30.32.2)
 """
 import base64
 import hmac
+import json
 import os
+import re
 import shutil
 import sqlite3
+import urllib.request
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -77,6 +85,8 @@ def init_db():
         """
     )
     ensure_column(c, "filaments", "color_name", "TEXT")
+    ensure_column(c, "filaments", "tag_uid", "TEXT")  # RFID-Kennung (Bambu), wird vom AMS-Abgleich gelernt
+    c.execute("CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY, value TEXT)")
     conn.commit()
     conn.close()
 
@@ -107,11 +117,211 @@ class SlotIn(BaseModel):
     color_name: str = Field(default="", max_length=60)
     manufacturer: str = Field(default="", max_length=60)
     weight: int = Field(default=0, ge=0, le=100000)
+    tag_uid: str | None = Field(default=None, max_length=40)
 
 
 class MoveIn(BaseModel):
     from_slot: str = Field(min_length=1, max_length=32)
     to_slot: str = Field(min_length=1, max_length=32)
+
+
+# ---------------------------------------------------------------- AMS-Live-Abgleich (Home Assistant)
+
+HA_STATES_TIMEOUT = 6
+ZERO_TAG = re.compile(r"^0*$")
+SLOT_NAME = re.compile(r"^(.*\S)\s+Slot\s+(\d+)$")
+AMS_SLOT_RE = re.compile(r"^AMS-(\d+)-(\d+)$")
+AMS_UNITS = (1, 2, 3)
+VARIANTS = {"basic", "matte", "silk", "hf", "tough", "cf", "gf", "plus", "+", "lite", "metal", "sparkle", "marble", "galaxy"}
+COLOR_OK = 70      # RGB-Abstand, bis zu dem Farben als "gleich" gelten (0..441)
+COLOR_CAND = 120   # RGB-Abstand, bis zu dem eine Spule als Kandidat vorgeschlagen wird
+
+
+class AmsUnavailable(Exception):
+    pass
+
+
+def ha_endpoint():
+    """Adresse und Token für den Zugriff auf Home Assistant (Add-on: Supervisor, sonst HA_URL/HA_TOKEN)."""
+    token = os.environ.get("SUPERVISOR_TOKEN", "")
+    if token:
+        return "http://supervisor/core/api/states", token
+    url, token = os.environ.get("HA_URL", "").rstrip("/"), os.environ.get("HA_TOKEN", "")
+    if url and token:
+        return url + "/api/states", token
+    raise AmsUnavailable(
+        "Kein Zugang zu Home Assistant. Im Add-on ist er automatisch vorhanden; "
+        "bei Docker bitte HA_URL und HA_TOKEN setzen."
+    )
+
+
+def fetch_ha_states():
+    url, token = ha_endpoint()
+    req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
+    try:
+        with urllib.request.urlopen(req, timeout=HA_STATES_TIMEOUT) as resp:
+            return json.load(resp)
+    except Exception as e:  # Netzwerk, Token, JSON …
+        raise AmsUnavailable(f"Home Assistant nicht erreichbar ({type(e).__name__}).") from e
+
+
+def norm_hex(value):
+    """'#RRGGBBAA' / '#RRGGBB' -> '#rrggbb' (oder None)."""
+    m = re.fullmatch(r"#?([0-9a-fA-F]{6})(?:[0-9a-fA-F]{2})?", (value or "").strip())
+    return "#" + m.group(1).lower() if m else None
+
+
+def color_distance(a, b):
+    a, b = norm_hex(a), norm_hex(b)
+    if not a or not b:
+        return 999.0
+    ra, rb = (int(a[i:i + 2], 16) for i in (1, 3, 5)), (int(b[i:i + 2], 16) for i in (1, 3, 5))
+    return sum((x - y) ** 2 for x, y in zip(ra, rb)) ** 0.5
+
+
+def base_type(material):
+    return (material or "").strip().split(" ")[0].upper()
+
+
+def collect_units(states):
+    """Fächer aller AMS-Einheiten aus den HA-Sensoren (erkannt an den Attributen slot/tag_uid/empty)."""
+    units = {}
+    for st in states:
+        attrs = st.get("attributes") or {}
+        if not str(st.get("entity_id", "")).startswith("sensor.") or not {"slot", "tag_uid", "empty"} <= attrs.keys():
+            continue
+        m = SLOT_NAME.match(str(attrs.get("friendly_name", "")))
+        if not m:
+            continue
+        name, pos = m.group(1), int(attrs.get("slot") or m.group(2))
+        tag = str(attrs.get("tag_uid") or "")
+        units.setdefault(name, {})[pos] = {
+            "pos": pos,
+            "empty": bool(attrs.get("empty")),
+            "type": str(attrs.get("type") or ""),
+            "name": str(attrs.get("name") or ""),
+            "color": norm_hex(attrs.get("color")),
+            "tag_uid": None if ZERO_TAG.match(tag) else tag.upper(),
+            "tray_weight": int(attrs.get("tray_weight") or 0),
+        }
+    return units
+
+
+def unit_order(names):
+    return sorted(names, key=lambda n: re.sub(r"[^a-z0-9]+", " ", n.lower()).split())
+
+
+def get_setting(conn, key, default=None):
+    row = conn.execute("SELECT value FROM settings WHERE key=?", (key,)).fetchone()
+    return row["value"] if row else default
+
+
+def ams_mapping(conn, names):
+    """AMS n der App -> Name der AMS in Home Assistant (gespeichert, sonst nach Namen sortiert)."""
+    try:
+        saved = json.loads(get_setting(conn, "ams_map", "{}"))
+    except ValueError:
+        saved = {}
+    order = unit_order(names)
+    mapping = {}
+    for i, unit in enumerate(AMS_UNITS):
+        want = saved.get(str(unit))
+        mapping[unit] = want if want in names else (order[i] if i < len(order) else None)
+    return mapping
+
+
+def describe_live(tray):
+    """Aus einem Live-Fach Hersteller/Material/Farbname für einen neuen Eintrag ableiten."""
+    tokens = tray["name"].split()
+    typ = tray["type"].upper()
+    idx = next((i for i, t in enumerate(tokens) if t.upper() == typ), None)
+    if idx is None:
+        return {"manufacturer": "", "material": tray["type"] or "PLA", "color_name": ""}
+    variants = [t for t in tokens[idx + 1:] if t.lower() in VARIANTS]
+    rest = [t for t in tokens[idx + 1:] if t.lower() not in VARIANTS]
+    return {
+        "manufacturer": " ".join(tokens[:idx]),
+        "material": " ".join([tray["type"], *variants]),
+        "color_name": " ".join(rest),
+    }
+
+
+def compatible(spool, tray):
+    return (
+        bool(spool)
+        and base_type(spool["material"]) == tray["type"].upper()
+        and color_distance(spool["color"], tray["color"]) <= COLOR_OK
+    )
+
+
+def build_ams(states, conn):
+    units = collect_units(states)
+    mapping = ams_mapping(conn, list(units))
+    spools = {r["slot"]: dict(r) for r in conn.execute("SELECT * FROM filaments").fetchall()}
+    by_tag = {s["tag_uid"].upper(): s for s in spools.values() if s.get("tag_uid")}
+    # Spulen außerhalb des AMS, die als Kandidaten für ein Fach in Frage kommen
+    outside = [s for s in spools.values() if not AMS_SLOT_RE.match(s["slot"])]
+
+    result = []
+    for unit in AMS_UNITS:
+        ha_name = mapping.get(unit)
+        trays = []
+        for pos in range(1, 5):
+            slot = f"AMS-{unit}-{pos}"
+            live = units.get(ha_name, {}).get(pos) if ha_name else None
+            spool = spools.get(slot)
+            entry = {
+                "slot": slot,
+                "pos": pos,
+                "live": live,
+                "app": (
+                    {k: spool.get(k) for k in ("material", "color", "color_name", "manufacturer", "weight", "tag_uid")}
+                    if spool else None
+                ),
+                "status": "unknown",
+                "action": None,
+                "candidates": [],
+            }
+            trays.append(entry)
+            if live is None:
+                continue
+            if live["empty"]:
+                entry["status"] = "gone" if spool else "empty"
+                continue
+            tag_owner = by_tag.get(live["tag_uid"]) if live["tag_uid"] else None
+            if tag_owner and tag_owner["slot"] == slot:
+                entry["status"] = "ok"
+                continue
+            if tag_owner:  # Spule ist bekannt, steckt aber laut App woanders
+                entry["status"] = "moved"
+                entry["action"] = {"kind": "move", "from_slot": tag_owner["slot"], "label": f"{tag_owner['slot']} → hierher"}
+                continue
+            if compatible(spool, live):
+                if live["tag_uid"] and not (spool.get("tag_uid") or "").strip():
+                    entry["status"] = "learn"
+                    entry["action"] = {"kind": "learn", "label": "Kennung merken"}
+                else:
+                    entry["status"] = "ok"
+                continue
+            entry["status"] = "mismatch" if spool else "missing"
+            cands = []
+            for s in outside:
+                if s.get("tag_uid") or base_type(s["material"]) != live["type"].upper():
+                    continue
+                d = color_distance(s["color"], live["color"])
+                if d <= COLOR_CAND:
+                    cands.append((d, s))
+            cands.sort(key=lambda x: (x[0], x[1]["slot"]))
+            entry["candidates"] = [
+                {
+                    "slot": s["slot"],
+                    "label": " · ".join(x for x in (s["slot"], s["manufacturer"], s["material"], s["color_name"]) if x),
+                    "color": s["color"],
+                }
+                for _, s in cands[:6]
+            ]
+        result.append({"unit": unit, "ha_name": ha_name, "trays": trays})
+    return {"available": True, "units": result, "ha_units": unit_order(list(units))}
 
 
 # ---------------------------------------------------------------- App
@@ -180,15 +390,17 @@ def list_slots():
 @app.post("/api/slots")
 def upsert_slot(item: SlotIn):
     with db() as conn:
-        existing = conn.execute("SELECT color_name FROM filaments WHERE slot=?", (item.slot,)).fetchone()
+        existing = conn.execute("SELECT color_name, tag_uid FROM filaments WHERE slot=?", (item.slot,)).fetchone()
         # Ein vorhandener Farbname bleibt erhalten, wenn keiner mitgeschickt wird
         color_name = item.color_name.strip() or (existing["color_name"] if existing and existing["color_name"] else "")
+        # Die gelernte RFID-Kennung bleibt beim Bearbeiten der Spule erhalten
+        tag_uid = item.tag_uid if item.tag_uid is not None else (existing["tag_uid"] if existing else None)
         conn.execute(
             """
-            INSERT OR REPLACE INTO filaments(slot, material, color, color_name, manufacturer, weight)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT OR REPLACE INTO filaments(slot, material, color, color_name, manufacturer, weight, tag_uid)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
-            (item.slot, item.material, item.color, color_name, item.manufacturer, item.weight),
+            (item.slot, item.material, item.color, color_name, item.manufacturer, item.weight, tag_uid),
         )
     return {"ok": True}
 
@@ -241,6 +453,105 @@ def summary(low: int = 100):
         "by_material": dict(sorted(by_material.items(), key=lambda kv: -kv[1])),
         "by_manufacturer": dict(sorted(by_manufacturer.items(), key=lambda kv: -kv[1])),
     }
+
+
+class AmsApplyIn(BaseModel):
+    slot: str = Field(pattern=r"^AMS-[1-3]-[1-4]$")
+    kind: str = Field(pattern=r"^(learn|move|create)$")
+    from_slot: str | None = Field(default=None, pattern=r"^[A-Za-z0-9_-]{1,32}$")
+
+
+class AmsMapIn(BaseModel):
+    unit: int = Field(ge=1, le=3)
+    name: str = Field(min_length=1, max_length=120)
+
+
+def _live_tray(slot, conn):
+    states = fetch_ha_states()
+    units = collect_units(states)
+    unit, pos = (int(x) for x in AMS_SLOT_RE.match(slot).groups())
+    name = ams_mapping(conn, list(units)).get(unit)
+    return units.get(name, {}).get(pos)
+
+
+def _clear_tag(conn, tag, keep_slot):
+    conn.execute("UPDATE filaments SET tag_uid=NULL WHERE tag_uid=? AND slot<>?", (tag, keep_slot))
+
+
+@app.get("/api/ams")
+def ams_status():
+    try:
+        states = fetch_ha_states()
+    except AmsUnavailable as e:
+        return {"available": False, "reason": str(e), "units": []}
+    with db() as conn:
+        return build_ams(states, conn)
+
+
+@app.post("/api/ams/apply")
+def ams_apply(item: AmsApplyIn):
+    try:
+        with db() as conn:
+            live = _live_tray(item.slot, conn)
+            if not live or live["empty"]:
+                return JSONResponse({"error": "Das Fach ist laut AMS leer oder nicht verbunden."}, status_code=409)
+            target = conn.execute("SELECT * FROM filaments WHERE slot=?", (item.slot,)).fetchone()
+
+            if item.kind == "learn":
+                if not target or not live["tag_uid"]:
+                    return JSONResponse({"error": "Nichts zu merken."}, status_code=400)
+                _clear_tag(conn, live["tag_uid"], item.slot)
+                conn.execute("UPDATE filaments SET tag_uid=? WHERE slot=?", (live["tag_uid"], item.slot))
+
+            elif item.kind == "move":
+                src_slot = item.from_slot
+                src = conn.execute("SELECT * FROM filaments WHERE slot=?", (src_slot or "",)).fetchone()
+                if not src or src_slot == item.slot:
+                    return JSONResponse({"error": "Quell-Spule nicht gefunden."}, status_code=404)
+                # Belegt? Dann tauschen die beiden Spulen die Plätze (Spule aus dem Regal gegen die im AMS).
+                tmp = f"__swap_{os.getpid()}"
+                if target:
+                    conn.execute("UPDATE filaments SET slot=? WHERE slot=?", (tmp, item.slot))
+                conn.execute("UPDATE filaments SET slot=? WHERE slot=?", (item.slot, src_slot))
+                if target:
+                    conn.execute("UPDATE filaments SET slot=? WHERE slot=?", (src_slot, tmp))
+                if live["tag_uid"]:
+                    _clear_tag(conn, live["tag_uid"], item.slot)
+                    conn.execute("UPDATE filaments SET tag_uid=? WHERE slot=?", (live["tag_uid"], item.slot))
+
+            else:  # create
+                if target:
+                    return JSONResponse({"error": "Der Slot ist bereits belegt."}, status_code=409)
+                info = describe_live(live)
+                if live["tag_uid"]:
+                    _clear_tag(conn, live["tag_uid"], item.slot)
+                conn.execute(
+                    "INSERT INTO filaments(slot, material, color, color_name, manufacturer, weight, tag_uid) VALUES (?,?,?,?,?,?,?)",
+                    (
+                        item.slot,
+                        info["material"],
+                        live["color"] or "#888888",
+                        info["color_name"],
+                        info["manufacturer"],
+                        live["tray_weight"] or 1000,
+                        live["tag_uid"],
+                    ),
+                )
+    except AmsUnavailable as e:
+        return JSONResponse({"error": str(e)}, status_code=503)
+    return {"ok": True}
+
+
+@app.post("/api/ams/map")
+def ams_map(item: AmsMapIn):
+    with db() as conn:
+        try:
+            saved = json.loads(get_setting(conn, "ams_map", "{}"))
+        except ValueError:
+            saved = {}
+        saved[str(item.unit)] = item.name
+        conn.execute("INSERT OR REPLACE INTO settings(key, value) VALUES ('ams_map', ?)", (json.dumps(saved),))
+    return {"ok": True}
 
 
 # App-Dateien (index.html, Manifest, Service Worker, Icons, Bibliotheken). Muss nach den API-Routen stehen.

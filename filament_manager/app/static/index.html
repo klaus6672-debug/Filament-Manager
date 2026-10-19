@@ -641,6 +641,37 @@ text-transform:uppercase;
 letter-spacing:1px;
 }
 .status-pill.offline{ background:rgba(231,76,60,.18); color:#ff8a7d; border-color:rgba(231,76,60,.5); }
+
+/* ---------- AMS Live-Abgleich ---------- */
+.ams-live{background:linear-gradient(180deg,#203246,#1b2635);border:3px solid #00a8e8;border-radius:18px;padding:16px;margin-bottom:26px;color:var(--text);box-shadow:0 10px 24px rgba(0,0,0,.22)}
+.ams-live[hidden]{display:none}
+.ams-live-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+.ams-live-head .rack-title{color:#dff6ff}
+.ams-live-head .rack-sub{color:var(--muted)}
+.ams-live-actions{display:flex;gap:8px;flex-wrap:wrap}
+.ams-live button,.ams-live select{font:inherit;font-size:13px;border-radius:10px;border:1px solid var(--line);background:#263244;color:var(--text);padding:7px 10px;cursor:pointer}
+.ams-live button.primary{background:var(--accent);border-color:var(--accent);color:#04202c;font-weight:700}
+.ams-live button:disabled{opacity:.5;cursor:default}
+.ams-unit{margin-top:14px}
+.ams-unit-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px;font-weight:800;color:#dff6ff;letter-spacing:1px}
+.ams-unit-head select{font-weight:400;letter-spacing:0;max-width:100%}
+.ams-row{display:grid;grid-template-columns:minmax(150px,1fr) minmax(150px,1fr) minmax(120px,auto) minmax(160px,1.2fr);gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--line);font-size:13px}
+.ams-row .pos{color:var(--muted);font-size:11px}
+.ams-spool{min-width:0}
+.ams-spool .txt{min-width:0;overflow-wrap:anywhere}
+.ams-swatch{display:inline-block;vertical-align:middle;margin-right:8px;width:22px;height:22px;border-radius:50%;border:2px solid rgba(255,255,255,.35);box-sizing:border-box}
+.ams-swatch.none{background:transparent;border-style:dashed}
+.ams-badge{display:inline-block;border-radius:999px;padding:3px 10px;font-size:12px;font-weight:700;white-space:nowrap}
+.ams-badge.ok{background:#1f6f43;color:#dfffee}
+.ams-badge.empty{background:#3a4556;color:#cbd5e5}
+.ams-badge.learn{background:#1f5f8f;color:#dff3ff}
+.ams-badge.moved,.ams-badge.missing,.ams-badge.mismatch,.ams-badge.gone{background:#8a5a12;color:#fff1d6}
+.ams-act{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.ams-act select{max-width:100%}
+.ams-msg{color:var(--muted);font-size:13px;padding:6px 0}
+.slot.ams-ok{box-shadow:0 0 0 2px #2ecc71 inset}
+.slot.ams-warn{box-shadow:0 0 0 2px #ffb341 inset}
+@media (max-width:760px){.ams-row{grid-template-columns:1fr 1fr}.ams-row .ams-act{grid-column:1 / -1}}
 </style>
 </head>
 <body>
@@ -804,6 +835,20 @@ letter-spacing:1px;
                 <div class="ams-title">AMS 3</div>
                 <div id="gridAMS3" class="grid grid-ams"></div>
             </div>
+        </div>
+
+        <div class="ams-live" id="amsLive" hidden>
+            <div class="ams-live-head">
+                <div>
+                    <div class="rack-title">AMS Live-Abgleich</div>
+                    <div class="rack-sub" id="amsLiveSub">Stand der Drucker aus Home Assistant</div>
+                </div>
+                <div class="ams-live-actions">
+                    <button type="button" class="primary" id="amsApplyAll" onclick="applyAllAms()" disabled>Vorschläge übernehmen</button>
+                    <button type="button" onclick="loadAms()" title="Neu laden">↻ Aktualisieren</button>
+                </div>
+            </div>
+            <div id="amsLiveBody"></div>
         </div>
     </div>
 
@@ -2356,7 +2401,127 @@ function buildSortedStorage(containerId, prefix, count){
 
         container.appendChild(createSlotElement(slotId));
     });
-}async function boot(){
+}
+
+/* ---------- AMS Live-Abgleich (Daten kommen über den Server aus Home Assistant) ---------- */
+let amsData = null;
+
+function amsEsc(v){
+    return String(v == null ? "" : v).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+
+const AMS_STATUS = {
+    ok: "✓ passt", empty: "leer", learn: "✓ passt", moved: "steckt jetzt hier",
+    mismatch: "weicht ab", missing: "nicht in der App", gone: "Fach leer"
+};
+
+function amsSpoolHtml(item, fallback){
+    if(!item) return `<span class="ams-swatch none"></span><span class="txt">${amsEsc(fallback)}</span>`;
+    const name = [item.manufacturer, item.material, item.color_name].filter(Boolean).join(" · ");
+    return `<span class="ams-swatch" style="background:${amsEsc(item.color)}"></span><span class="txt">${amsEsc(name)}</span>`;
+}
+
+function renderAms(data){
+    const box = document.getElementById("amsLive");
+    const body = document.getElementById("amsLiveBody");
+    if(!data || !data.available){ box.hidden = true; return; }
+    amsData = data;
+    box.hidden = false;
+    let open = 0;
+    let html = "";
+    document.querySelectorAll(".slot.ams-ok, .slot.ams-warn").forEach(el => el.classList.remove("ams-ok", "ams-warn"));
+
+    data.units.forEach(unit => {
+        const opts = (data.ha_units || []).map(n =>
+            `<option value="${amsEsc(n)}"${n === unit.ha_name ? " selected" : ""}>${amsEsc(n)}</option>`).join("");
+        html += `<div class="ams-unit"><div class="ams-unit-head">AMS ${unit.unit}
+            <select onchange="setAmsMap(${unit.unit}, this.value)" title="Welcher AMS aus Home Assistant gehört zu AMS ${unit.unit}?">${opts}</select></div>`;
+        if(!unit.ha_name){ html += `<div class="ams-msg">Kein AMS aus Home Assistant zugeordnet.</div></div>`; return; }
+
+        unit.trays.forEach(t => {
+            const live = t.live;
+            const tile = document.querySelector(`.slot[data-slot="${t.slot}"]`);
+            if(tile && ["ok", "learn"].includes(t.status)) tile.classList.add("ams-ok");
+            else if(tile && ["moved", "mismatch", "missing", "gone"].includes(t.status)) tile.classList.add("ams-warn");
+
+            let liveHtml;
+            if(!live) liveHtml = amsSpoolHtml(null, "keine Daten");
+            else if(live.empty) liveHtml = amsSpoolHtml(null, "leer");
+            else liveHtml = `<span class="ams-swatch" style="background:${amsEsc(live.color)}"></span><span class="txt">${amsEsc(live.name || live.type)}${live.tag_uid ? "" : " <span class='pos'>(ohne RFID)</span>"}</span>`;
+
+            let act = "";
+            if(t.action){
+                open++;
+                act += `<button type="button" onclick="applyAms('${t.slot}','${t.action.kind}','${amsEsc(t.action.from_slot || "")}')">${amsEsc(t.action.label)}</button>`;
+            }
+            if(t.candidates && t.candidates.length){
+                const copts = t.candidates.map(c => `<option value="${amsEsc(c.slot)}">${amsEsc(c.label)}</option>`).join("");
+                act += `<select id="cand-${t.slot}">${copts}</select>
+                        <button type="button" onclick="applyAms('${t.slot}','move',document.getElementById('cand-${t.slot}').value)">${t.app ? "Tauschen" : "Hierher"}</button>`;
+            }
+            if(t.status === "missing"){
+                act += `<button type="button" onclick="applyAms('${t.slot}','create','')">Neu anlegen</button>`;
+            }
+            if(t.status === "gone") act += `<span class="pos">Spule in der App entfernen oder umlagern</span>`;
+
+            html += `<div class="ams-row">
+                <div class="ams-spool"><div><div class="pos">Live · Fach ${t.pos}</div>${liveHtml}</div></div>
+                <div class="ams-spool"><div><div class="pos">In der App · ${t.slot}</div>${amsSpoolHtml(t.app, "leer")}</div></div>
+                <div><span class="ams-badge ${t.status}">${amsEsc(AMS_STATUS[t.status] || "–")}</span></div>
+                <div class="ams-act">${act}</div></div>`;
+        });
+        html += `</div>`;
+    });
+    body.innerHTML = html;
+    const btn = document.getElementById("amsApplyAll");
+    btn.disabled = !open;
+    btn.textContent = open ? `Vorschläge übernehmen (${open})` : "Vorschläge übernehmen";
+    document.getElementById("amsLiveSub").textContent = "Stand der Drucker aus Home Assistant · " + new Date().toLocaleTimeString("de-DE", {hour:"2-digit", minute:"2-digit"});
+}
+
+async function loadAms(){
+    try{
+        const res = await fetch("api/ams", {cache:"no-store"});
+        if(!res.ok) throw new Error("HTTP " + res.status);
+        renderAms(await res.json());
+    }catch(e){
+        document.getElementById("amsLive").hidden = true;
+    }
+}
+
+async function applyAms(slot, kind, fromSlot){
+    const body = {slot, kind};
+    if(fromSlot) body.from_slot = fromSlot;
+    const {ok, data} = await apiSend("POST", "api/ams/apply", body);
+    if(!ok){ alert(data.error || "Übernehmen fehlgeschlagen."); return false; }
+    window.location.reload();
+    return true;
+}
+
+async function applyAllAms(){
+    if(!amsData) return;
+    const jobs = [];
+    amsData.units.forEach(u => u.trays.forEach(t => {
+        if(t.action) jobs.push({slot: t.slot, kind: t.action.kind, from_slot: t.action.from_slot || "", label: t.slot + ": " + t.action.label});
+    }));
+    if(!jobs.length) return;
+    if(!confirm("Folgendes übernehmen?\n\n" + jobs.map(j => "• " + j.label).join("\n"))) return;
+    for(const j of jobs){
+        const body = {slot: j.slot, kind: j.kind};
+        if(j.from_slot) body.from_slot = j.from_slot;
+        const {ok, data} = await apiSend("POST", "api/ams/apply", body);
+        if(!ok){ alert(j.slot + ": " + (data.error || "fehlgeschlagen")); break; }
+    }
+    window.location.reload();
+}
+
+async function setAmsMap(unit, name){
+    const {ok, data} = await apiSend("POST", "api/ams/map", {unit, name});
+    if(!ok){ alert(data.error || "Speichern fehlgeschlagen."); return; }
+    loadAms();
+}
+
+async function boot(){
 await loadSlots();
 const count = Object.keys(slotsData).length;
 const weight = Object.values(slotsData).reduce((s, x) => s + (parseInt(x.weight, 10) || 0), 0);
@@ -2377,6 +2542,11 @@ updateNetFilamentWeight();
 
 renderStatsPage();
 suggestColorName();
+loadAms();
+setInterval(() => {
+    const box = document.getElementById("amsLive");
+    if(!document.hidden && !box.contains(document.activeElement)) loadAms();
+}, 60000);
 }
 boot();
 

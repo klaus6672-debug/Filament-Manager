@@ -1,8 +1,8 @@
 name: Filament Manager
-version: "1.0.1"
+version: "1.1.0"
 slug: filament_manager
 description: Filamentlager mit Regal-Ansicht, QR-Labels, Barcode-Scan und Statistik
-url: https://github.com/Klaus6672/filament-manager
+url: https://github.com/klaus6672-debug/Filament-Manager
 arch:
   - amd64
   - aarch64
@@ -17,6 +17,7 @@ ports:
   8099/tcp: null
 ports_description:
   8099/tcp: Direkter Zugriff (App-Installation und Kamera-Scan am Handy, dafür HTTPS vorschalten)
+homeassistant_api: true
 map:
   - share:ro
 options:

@@ -61,13 +61,14 @@ Anbindung über Sensoren: `homeassistant/filament_sensors.yaml` (Anleitung am Da
 
 **Home Assistant OS / Supervised (mit Add-on-Store):** Dieses Repository ist ein Add-on-Repository.
 
-1. Repository auf GitHub hochladen (Adresse: `https://github.com/Klaus6672/filament-manager`; bei anderem Benutzernamen in `repository.yaml` und `filament_manager/config.yaml` anpassen).
+1. Repository auf GitHub hochladen (Adresse: `https://github.com/klaus6672-debug/Filament-Manager`; bei anderem Benutzernamen in `repository.yaml` und `filament_manager/config.yaml` anpassen).
 2. Home Assistant → Einstellungen → Add-ons → Add-on-Store → ⋮ → Repositories → GitHub-Adresse eintragen.
 3. „Filament Manager" installieren und starten. Es erscheint ein Eintrag „Filament" in der Seitenleiste (Ingress,
    Anmeldung übernimmt Home Assistant).
 4. Bestehende Datenbank übernehmen: Datei als `filament_import.db` in den Ordner `/share` legen (z. B. mit dem
    Samba-Add-on) und das Add-on einmal starten. Alternativ: im alten System „CSV Export", im neuen „CSV Import".
-5. Für den **Kamera-Scan und die App-Installation am Handy** den Port 8099 im Add-on freigeben und per HTTPS aufrufen,
+5. **AMS-Live-Abgleich (Bambu Lab):** läuft im Add-on automatisch, wenn die Bambu-Integration in Home Assistant eingerichtet ist (siehe `filament_manager/DOCS.md`). Bei Docker ohne Add-on `HA_URL` und `HA_TOKEN` (Langzeit-Zugriffstoken) in `.env` setzen.
+6. Für den **Kamera-Scan und die App-Installation am Handy** den Port 8099 im Add-on freigeben und per HTTPS aufrufen,
    denn innerhalb der Home-Assistant-Seitenleiste ist die Kamera nicht verfügbar.
 
 ## 4. Was gegenüber dem alten Projekt anders ist

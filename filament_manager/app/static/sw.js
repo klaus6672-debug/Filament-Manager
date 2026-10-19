@@ -3,7 +3,7 @@
 //  - Die Slot-Daten werden bei jeder erfolgreichen Abfrage zwischengespeichert; ohne Verbindung
 //    zeigt die App den letzten Stand (nur lesen). Änderungen brauchen immer eine Serververbindung.
 // Bei einer neuen App-Version die Zahl bei VERSION erhöhen.
-const VERSION = 4;
+const VERSION = 5;
 const SHELL_CACHE = `fm-shell-${VERSION}`;
 const DATA_CACHE = "fm-data";
 const BASE = self.registration.scope;

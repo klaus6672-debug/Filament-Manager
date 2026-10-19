@@ -20,6 +20,19 @@ Home-Assistant-Seitenleiste ist die Kamera nicht verfügbar.
 `filament.db` des alten Systems als `filament_import.db` in den Ordner `/share` legen und das Add-on starten.
 Das passiert nur beim allerersten Start, vorhandene Daten werden nie überschrieben. Alternativ: CSV Export/Import in der App.
 
+## AMS Live-Abgleich (Bambu Lab)
+
+Ist in Home Assistant die Bambu-Lab-Integration eingerichtet, zeigt Seite 1 unter den drei AMS den **Live-Abgleich**:
+Pro AMS-Fach steht, was der Drucker meldet (Material, Farbe), daneben die Spule, die die App in `AMS-n-m` führt.
+
+- Das Add-on liest die Sensoren der Fächer über Home Assistant. Es ist keine eigene Verbindung zum Drucker nötig.
+- Über die Auswahl neben „AMS 1/2/3" legst du fest, welcher AMS aus Home Assistant zu welchem AMS der App gehört (wird gespeichert).
+- **Kennung merken:** Passt die Spule, speichert die App die RFID-Kennung der Bambu-Spule.
+- **Steckt jetzt hier:** Eine Spule mit bekannter Kennung wurde in ein anderes Fach gesteckt. Ein Klick verschiebt sie (ist das Fach belegt, tauschen beide Spulen die Plätze).
+- **Weicht ab / Nicht in der App:** Die App schlägt passende Spulen aus Regal oder Lager vor (gleiches Material, ähnliche Farbe) oder legt die Spule aus den Live-Daten neu an.
+- **Vorschläge übernehmen** führt alle eindeutigen Vorschläge nach Rückfrage aus. Es wird nie etwas ohne deinen Klick geändert.
+- Spulen ohne RFID (Fremdhersteller) werden über Material und Farbe verglichen. Das Restgewicht übernimmt die App nicht, die P1S-AMS melden es nicht.
+
 ## Sensoren in Home Assistant
 
 Die Schnittstelle `http://<Host>:8099/api/summary` liefert Spulenzahl, Gesamtgewicht und knappe Spulen
