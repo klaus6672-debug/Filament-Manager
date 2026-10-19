@@ -1,0 +1,35 @@
+# Filament Manager mit HTTPS (Caddy). Start:  docker compose up -d --build
+# Einstellungen stehen in der Datei ".env" (Vorlage: .env.example).
+services:
+  filament:
+    build: ./filament_manager
+    container_name: filament-manager
+    restart: unless-stopped
+    environment:
+      FMT_USER: ${FMT_USER:-fmt}
+      FMT_PASSWORD: ${FMT_PASSWORD:?Bitte FMT_PASSWORD in der Datei .env setzen}
+    volumes:
+      # Hier liegt filament.db (Datenbank). Bestehende Datenbank einfach hineinkopieren.
+      - ${FILAMENT_DATA:-./data}:/data
+    ports:
+      # Unverschlüsselter Zugang, gedacht für Home-Assistant-Sensoren im Heimnetz. Zeile entfernen, wenn nicht benötigt.
+      - "${FILAMENT_HTTP_PORT:-8080}:8080"
+
+  https:
+    image: caddy:2
+    container_name: filament-https
+    restart: unless-stopped
+    depends_on:
+      - filament
+    ports:
+      - "${FILAMENT_HTTPS_PORT:-8443}:8443"
+    environment:
+      FMT_HOST: ${FMT_HOST:?Bitte FMT_HOST (IP oder Name des Mini-PCs) in der Datei .env setzen}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:

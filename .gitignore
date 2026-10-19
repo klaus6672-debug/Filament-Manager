@@ -1,0 +1,13 @@
+# Niemals ins Repository: eigene Daten und Schlüssel
+*.db
+*.db-journal
+data/
+.env
+*.pem
+*.key
+*.crt
+*.tar.gz
+venv/
+__pycache__/
+node_modules/
+Filament/

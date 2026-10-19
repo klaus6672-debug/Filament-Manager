@@ -1,0 +1,3 @@
+-r filament_manager/app/requirements.txt
+pytest
+httpx

@@ -1,0 +1,11 @@
+# HTTPS mit eigenem Zertifikat (Caddy erzeugt und erneuert es automatisch).
+{
+	auto_https disable_redirects
+	# Browser senden bei einer reinen IP-Adresse keinen Servernamen (SNI); ohne diese Zeile bricht der Verbindungsaufbau ab.
+	default_sni {$FMT_HOST}
+}
+
+https://{$FMT_HOST}:8443 {
+	tls internal
+	reverse_proxy filament:8080
+}

@@ -1,0 +1,64 @@
+# Home-Assistant-Sensoren für den Filament Manager.
+#
+# Einrichtung (Home Assistant in Docker / "Container"-Installation):
+#   1. Diese Datei nach /config/packages/filament.yaml kopieren
+#      (in configuration.yaml einmalig:  homeassistant: { packages: !include_dir_named packages } )
+#   2. In /config/secrets.yaml ergänzen:   filament_password: DEIN-PASSWORT
+#   3. IP-Adresse unten durch die des Mini-PCs ersetzen, Konfiguration prüfen, neu starten.
+#
+# Als Add-on (HAOS/Supervised) lautet die Adresse:  http://<hostname>:8099/api/summary  (Port dafür im Add-on freigeben)
+rest:
+  - resource: "http://192.168.178.156:8080/api/summary?low=150"   # ?low=… = Grenze in Gramm für "knapp"
+    scan_interval: 300
+    authentication: basic
+    username: fmt
+    password: !secret filament_password
+    sensor:
+      - name: "Filament Spulen"
+        unique_id: filament_spulen
+        icon: mdi:printer-3d-nozzle
+        value_template: "{{ value_json.spool_count }}"
+        state_class: measurement
+      - name: "Filament Gesamtgewicht"
+        unique_id: filament_gesamtgewicht
+        icon: mdi:weight-kilogram
+        unit_of_measurement: "kg"
+        device_class: weight
+        state_class: measurement
+        value_template: "{{ (value_json.total_weight_g / 1000) | round(2) }}"
+        json_attributes:
+          - by_material
+          - by_manufacturer
+      - name: "Filament knapp"
+        unique_id: filament_knapp
+        icon: mdi:alert-circle-outline
+        value_template: "{{ value_json.low_stock_count }}"
+        json_attributes:
+          - low_stock
+          - low_threshold_g
+
+template:
+  - binary_sensor:
+      - name: "Filament nachkaufen"
+        unique_id: filament_nachkaufen
+        device_class: problem
+        state: "{{ states('sensor.filament_knapp') | int(0) > 0 }}"
+        attributes:
+          spulen: >-
+            {{ state_attr('sensor.filament_knapp', 'low_stock')
+               | map(attribute='slot') | list | join(', ') }}
+
+automation:
+  - alias: "Filament: Hinweis bei knappen Spulen"
+    id: filament_knapp_hinweis
+    trigger:
+      - platform: state
+        entity_id: binary_sensor.filament_nachkaufen
+        to: "on"
+    action:
+      - service: notify.notify          # ggf. durch deinen Notify-Dienst ersetzen (z. B. notify.mobile_app_pixel)
+        data:
+          title: "Filament wird knapp"
+          message: >-
+            {{ states('sensor.filament_knapp') }} Spule(n) unter {{ state_attr('sensor.filament_knapp','low_threshold_g') }} g:
+            {{ state_attr('binary_sensor.filament_nachkaufen', 'spulen') }}

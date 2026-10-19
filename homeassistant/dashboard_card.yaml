@@ -1,0 +1,15 @@
+# Dashboard-Karten (Dashboard bearbeiten -> Karte hinzufügen -> "Manuell").
+# 1) Kennzahlen:
+type: entities
+title: Filamentlager
+entities:
+  - sensor.filament_spulen
+  - sensor.filament_gesamtgewicht
+  - entity: sensor.filament_knapp
+  - entity: binary_sensor.filament_nachkaufen
+---
+# 2) Die komplette App im Dashboard (Webseite-Karte). Wichtig: HTTPS-Adresse verwenden,
+#    sonst blockiert der Browser die Einbettung auf einer https-Seite.
+type: iframe
+url: https://192.168.178.156:8443
+aspect_ratio: 100%

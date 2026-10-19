@@ -1,0 +1,27 @@
+name: Filament Manager
+version: "1.0.0"
+slug: filament_manager
+description: Filamentlager mit Regal-Ansicht, QR-Labels, Barcode-Scan und Statistik
+url: https://github.com/Klaus6672/filament-manager
+arch:
+  - amd64
+  - aarch64
+init: false
+startup: application
+boot: auto
+ingress: true
+ingress_port: 8099
+panel_icon: mdi:printer-3d-nozzle
+panel_title: Filament
+ports:
+  8099/tcp: null
+ports_description:
+  8099/tcp: Direkter Zugriff (App-Installation und Kamera-Scan am Handy, dafür HTTPS vorschalten)
+map:
+  - share:ro
+options:
+  username: fmt
+  password: ""
+schema:
+  username: str
+  password: password?

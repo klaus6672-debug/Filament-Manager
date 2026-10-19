@@ -1,0 +1,2389 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Filament Manager – Holz + AMS</title>
+
+<link rel="manifest" href="manifest.webmanifest" crossorigin="use-credentials">
+<meta name="theme-color" content="#1a1f28">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Filament">
+<link rel="icon" type="image/png" href="icons/favicon.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+
+<script src="vendor/html5-qrcode.min.js"></script>
+<script src="vendor/qrcode.min.js"></script>
+<script src="vendor/jspdf.umd.min.js"></script>
+
+<style>
+:root{
+    --bg:#f5efe6;
+    --wood-1:#e3c598;
+    --wood-2:#d4b382;
+    --wood-3:#c4a475;
+    --panel:#1a1f28;
+    --panel-2:#232a35;
+    --line:#364050;
+    --text:#eef3ff;
+    --muted:#9aa4b5;
+    --accent:#00b8ff;
+    --accent-2:#2ecc71;
+    --select:#ffb341;
+    --danger:#e74c3c;
+    --slot-dark:#262d38;
+    --slot-hover:#2f3744;
+    --shadow:0 10px 28px rgba(0,0,0,.20);
+}
+.material-divider{
+    grid-column: 1 / -1;
+    background:linear-gradient(180deg,#3a4454,#2a3240);
+    color:#fff;
+    font-weight:800;
+    letter-spacing:1px;
+    text-transform:uppercase;
+    padding:10px 14px;
+    border-radius:12px;
+    border:1px solid #4a5568;
+    box-shadow:0 4px 10px rgba(0,0,0,.15);
+    margin-top:4px;
+}
+*{box-sizing:border-box}
+
+body{
+    margin:0;
+    padding:20px;
+    font-family:'Segoe UI', Arial, sans-serif;
+    background:linear-gradient(180deg, #fbf8f2 0%, #f0e7d8 100%);
+    color:#2f2a22;
+}
+
+.page-wrap{
+    max-width:1400px;
+    margin:0 auto;
+}
+.rainbow-tile{
+    background: linear-gradient(
+        90deg,
+        #ff0000,
+        #ff7f00,
+        #ffff00,
+        #00ff00,
+        #00ffff,
+        #0000ff,
+        #8b00ff
+    );
+}
+
+.galaxy-tile{
+    background:
+        radial-gradient(circle at 15% 25%, rgba(255,255,255,0.9) 1px, transparent 2px),
+        radial-gradient(circle at 35% 65%, rgba(255,255,255,0.8) 1px, transparent 2px),
+        radial-gradient(circle at 70% 20%, rgba(255,255,255,0.7) 1px, transparent 2px),
+        radial-gradient(circle at 85% 75%, rgba(255,255,255,0.7) 1px, transparent 2px),
+        radial-gradient(circle at 55% 45%, rgba(255,255,255,0.6) 1px, transparent 2px),
+        radial-gradient(circle at 25% 80%, rgba(255,255,255,0.6) 1px, transparent 2px),
+        radial-gradient(circle at 75% 55%, rgba(255,255,255,0.6) 1px, transparent 2px),
+        linear-gradient(135deg,#1a0f2e,#2a1040,#0b0b18);
+}}.rack-row{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:18px;
+    margin:26px 0;
+}
+
+.header-grid{
+    display:grid;
+    grid-template-columns:380px 1fr;
+    gap:20px;
+    margin-bottom:22px;
+    align-items:start;
+}
+
+.panel{
+    background:linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02));
+    background-color:var(--panel);
+    color:var(--text);
+    border:1px solid var(--line);
+    border-radius:18px;
+    box-shadow:0 12px 28px rgba(0,0,0,.25);
+    overflow:hidden;
+}
+
+.panel-head{
+    padding:14px 16px;
+    border-bottom:1px solid var(--line);
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+}
+
+.panel-body{
+    padding:16px;
+}
+
+.panel-title{
+    font-size:15px;
+    font-weight:700;
+}
+
+.brand{
+    display:flex;
+    align-items:center;
+    gap:10px;
+}
+
+.brand-badge{
+    width:36px;
+    height:36px;
+    border-radius:10px;
+    display:grid;
+    place-items:center;
+    background:linear-gradient(135deg, rgba(0,184,255,.18), rgba(46,204,113,.18));
+    border:1px solid rgba(255,255,255,.08);
+    font-size:18px;
+}
+
+.brand-sub{
+    color:var(--muted);
+    font-size:12px;
+    margin-top:2px;
+}
+
+.status-pill{
+    padding:6px 10px;
+    border-radius:999px;
+    background:rgba(46,204,113,.12);
+    color:#96f0b5;
+    border:1px solid rgba(46,204,113,.25);
+    font-size:12px;
+    white-space:nowrap;
+}
+
+.formbox form{
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+}
+
+input,select{
+    width:100%;
+    padding:11px 12px;
+    border-radius:12px;
+    border:1px solid var(--line);
+    background:var(--panel-2);
+    color:var(--text);
+    outline:none;
+    font-size:14px;
+}
+
+input::placeholder{
+    color:#8b96a8;
+}
+
+input:focus,select:focus{
+    border-color:rgba(0,184,255,.6);
+    box-shadow:0 0 0 3px rgba(0,184,255,.12);
+}
+
+button{
+    padding:11px 14px;
+    border:none;
+    border-radius:12px;
+    cursor:pointer;
+    color:white;
+    font-weight:700;
+    transition:transform .15s ease, opacity .15s ease;
+}
+
+button:hover{
+    transform:translateY(-1px);
+    opacity:.98;
+}
+
+button.action{ background:linear-gradient(180deg, #2ecc71, #27ae60); }
+button.scan{ background:linear-gradient(180deg, #29c4ff, #1697df); }
+button.print{ background:linear-gradient(180deg, #7d87ff, #666fe8); }
+button.navbtn{ background:linear-gradient(180deg, #445066, #2f3849); }
+button.navbtn.active{ background:linear-gradient(180deg, #ffbe55, #f39c12); color:#1d160b; }
+button.label-secondary{ background:linear-gradient(180deg, #5e6a7d, #475161); }
+button.csvbtn{ background:linear-gradient(180deg, #ff9f43, #e67e22); }
+button.csvimport{ background:linear-gradient(180deg, #7f8c8d, #667172); }
+
+.button-row{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:8px;
+    margin-top:10px;
+}
+
+.label-toolbar{
+    margin-top:12px;
+    display:flex;
+    flex-wrap:wrap;
+    gap:8px;
+}
+
+.nav-row{
+    display:flex;
+    gap:8px;
+    flex-wrap:wrap;
+    margin-bottom:14px;
+}
+
+#reader{
+    margin-top:14px;
+    width:100%;
+    max-width:320px;
+    overflow:hidden;
+    border-radius:14px;
+    background:#11161e;
+}
+
+.hint{
+    margin-top:12px;
+    color:var(--muted);
+    font-size:12px;
+    line-height:1.45;
+}
+
+.search-box{
+    max-width:460px;
+}
+
+.kpis{
+    display:grid;
+    grid-template-columns:repeat(4, minmax(120px, 1fr));
+    gap:10px;
+    margin-top:16px;
+}
+
+.kpi{
+    background:var(--panel-2);
+    border:1px solid var(--line);
+    border-radius:14px;
+    padding:12px;
+}
+
+.kpi-label{
+    color:var(--muted);
+    font-size:12px;
+    margin-bottom:6px;
+}
+
+.kpi-value{
+    font-size:20px;
+    font-weight:800;
+}
+
+.page{
+    display:none;
+}
+
+.page.active{
+    display:block;
+}
+
+.wood-rack{
+    background-color:var(--wood-1);
+    background-image:
+        repeating-linear-gradient(
+            90deg,
+            transparent,
+            transparent 48px,
+            rgba(212,179,130,.10) 48px,
+            rgba(212,179,130,.10) 96px
+        );
+    border-left:10px solid var(--wood-2);
+    border-right:10px solid var(--wood-2);
+    border-bottom:10px solid var(--wood-3);
+    box-shadow:var(--shadow), inset 0 -8px 10px rgba(140,102,60,.25);
+
+    border-radius:16px 16px 12px 12px;
+
+    padding:24px 20px;
+    margin-top:26px;
+    margin-bottom:26px;
+}
+
+.rack-head{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    margin-bottom:14px;
+}
+
+.rack-title{
+    color:#7a5935;
+    font-weight:800;
+    text-transform:uppercase;
+    letter-spacing:2px;
+    font-size:13px;
+}
+
+.rack-sub{
+    color:#8d6c43;
+    font-size:12px;
+}
+
+.grid{
+    display:grid;
+    gap:12px;
+}
+
+.grid-a{grid-template-columns:repeat(6, minmax(95px,1fr))}
+.grid-b,.grid-c{grid-template-columns:repeat(3, minmax(95px,1fr))}
+.grid-main{grid-template-columns:repeat(9, minmax(95px,1fr))}
+.grid-ams{grid-template-columns:repeat(4, minmax(95px,1fr))}
+.slot{
+    min-height:118px;
+    border-radius:16px;
+    border:1px solid #3b4352;
+    background:
+        linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,0)),
+        var(--slot-dark);
+    color:#e8eefc;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    text-align:center;
+    padding:10px;
+    position:relative;
+    cursor:pointer;
+    transition:all .15s ease;
+    box-shadow:inset 0 -14px 20px rgba(0,0,0,.16);
+}
+
+.slot:hover{
+    transform:translateY(-1px);
+    background:
+        linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,0)),
+        var(--slot-hover);
+}
+
+.slot::before{
+    content:"";
+    position:absolute;
+    top:9px;
+    left:50%;
+    transform:translateX(-50%);
+    width:36px;
+    height:5px;
+    border-radius:999px;
+    background:rgba(255,255,255,.08);
+}
+
+.slotSelected{
+    border:2px solid var(--select);
+    box-shadow:0 0 0 3px rgba(255,179,65,.18), inset 0 -14px 20px rgba(0,0,0,.16);
+}
+
+.slot.dragover{
+    border:2px dashed var(--accent);
+    box-shadow:0 0 0 3px rgba(0,184,255,.16);
+}
+
+.slot.selected-for-label{
+    box-shadow:
+        0 0 0 3px rgba(125,135,255,.28),
+        inset 0 -14px 20px rgba(0,0,0,.16);
+    border-color:#7d87ff;
+}
+
+.slot-inner{
+    width:100%;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+}
+.slot-item{
+    width:100%;
+    border-radius:12px;
+    padding:12px 8px 10px 8px;
+    background:linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.03));
+    border:1px solid rgba(255,255,255,.10);
+    cursor:grab;
+    position:relative;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.08);
+}
+
+.slot-item:active{
+    cursor:grabbing;
+}
+
+.slot-color{
+    position:absolute;
+    top:12px;
+    right:6px;
+    width:52px;
+    height:52px;
+    border-radius:12px;
+    border:2px solid rgba(255,255,255,.22);
+    box-shadow:0 4px 10px rgba(0,0,0,.25);
+}
+
+.slot-manufacturer{
+    font-size:12px;
+    font-weight:800;
+    color:#fff;
+    line-height:1.2;
+    word-break:break-word;
+    text-align:left;
+    width:100%;
+    padding-right:68px;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+}
+.slot-material{
+    font-size:11px;
+    color:#eef3ff;
+    line-height:1.25;
+    text-align:left;
+    width:100%;
+    padding-right:68px;
+    margin-top:4px;
+}
+.slot-colorname{
+    font-size:11px;
+    color:#d7e2f7;
+    line-height:1.25;
+    text-align:left;
+    width:100%;
+    padding-right:68px;
+    margin-top:2px;
+}
+.slot-length{
+    position:absolute;
+    bottom:6px;
+    right:6px;
+    font-size:11px;
+    font-weight:700;
+    color:#bcd2ff;
+}
+
+.length-warning{
+    color:#ffb347;
+}
+
+.length-critical{
+    color:#ff4d4d;
+}
+.slot-meta{
+    font-size:11px;
+    color:#eef3ff;
+    margin-top:4px;
+    line-height:1.3;
+    text-align:left;
+    width:100%;
+    padding-right:68px;
+    text-shadow:0 1px 2px rgba(0,0,0,.25);
+}
+.slot-id{
+    font-size:11px;
+    color:#d7e2f7;
+    text-align:left;
+    width:100%;
+    padding-right:68px;
+    margin-top:2px;
+}
+.slot-empty{
+    color:#9fb1c9;
+    font-size:12px;
+    font-weight:700;
+}
+
+.delete-btn{
+    position:absolute;
+    top:-8px;
+    right:-8px;
+    width:26px;
+    height:26px;
+    border-radius:50%;
+    border:none;
+    background:var(--danger);
+    color:white;
+    font-weight:800;
+    cursor:pointer;
+    box-shadow:0 4px 10px rgba(0,0,0,.25);
+    display:none;
+    padding:0;
+    line-height:26px;
+    z-index:3;
+}
+
+.slot:hover .delete-btn{
+    display:block;
+}
+.slot:hover .slot-label-check{
+    display:block;
+}
+
+.slot-label-check{
+    position:absolute;
+    right:8px;
+    bottom:8px;
+    z-index:3;
+    width:18px;
+    height:18px;
+    accent-color:#f39c12;
+    cursor:pointer;
+    display:none;
+
+}
+
+.ams-wrap{
+    display:grid;
+    grid-template-columns:repeat(1, 1fr);
+    gap:18px;
+    margin-top:26px;
+    margin-bottom:26px;
+}
+
+.ams-box{
+    background:linear-gradient(180deg, #203246, #1b2635);
+    border:3px solid #00a8e8;
+    border-radius:18px;
+    padding:14px;
+    box-shadow:0 10px 24px rgba(0,0,0,.22);
+}
+
+.ams-title{
+    color:#dff6ff;
+    font-weight:800;
+    letter-spacing:1px;
+    margin-bottom:12px;
+    text-align:center;
+}
+
+.small-note{
+    color:#8d6c43;
+    font-size:12px;
+}
+
+@media (max-width: 1050px){
+    .header-grid{
+        grid-template-columns:1fr;
+    }
+    .ams-wrap{
+        grid-template-columns:1fr;
+    }
+}
+
+@media (max-width: 760px){
+    body{padding:12px}
+
+    .grid-a{
+        grid-template-columns:repeat(2,1fr);
+        justify-content:center;
+    }
+
+    .grid-b,.grid-c{
+        grid-template-columns:repeat(2,1fr);
+        justify-content:center;
+    }
+
+    .grid-main{
+        grid-template-columns:repeat(2,1fr);
+        justify-content:center;
+    }
+
+    .grid-ams{
+        grid-template-columns:repeat(2,1fr);
+        justify-content:center;
+    }
+
+    .slot{min-height:96px;font-size:11px}
+    .button-row{grid-template-columns:1fr}
+    .kpis{grid-template-columns:1fr}
+    .rack-row{grid-template-columns:1fr;}
+}
+.stats-list{
+display:flex;
+flex-direction:column;
+gap:10px;
+}
+
+.stats-row{
+display:flex;
+justify-content:space-between;
+align-items:center;
+gap:12px;
+background:var(--panel);
+color:var(--text);
+border:1px solid var(--line);
+border-radius:14px;
+padding:12px 14px;
+}
+
+.stats-name{
+font-size:14px;
+font-weight:800;
+}
+
+.stats-meta{
+font-size:13px;
+color:var(--muted);
+}
+
+.stats-section{
+margin-bottom:20px;
+}
+
+.stats-section h3{
+margin:0 0 10px 0;
+color:#7a5935;
+font-size:14px;
+text-transform:uppercase;
+letter-spacing:1px;
+}
+.status-pill.offline{ background:rgba(231,76,60,.18); color:#ff8a7d; border-color:rgba(231,76,60,.5); }
+</style>
+</head>
+<body>
+<div class="page-wrap">
+
+    <div class="header-grid">
+        <div class="panel formbox">
+            <div class="panel-head">
+                <div class="brand">
+                    <div class="brand-badge">🧵</div>
+                    <div>
+                        <div class="panel-title">Filament Manager</div>
+                        <div class="brand-sub">Holzregal + AMS Oberfläche</div>
+                    </div>
+                </div>
+                <div class="status-pill" id="statusPill">Verbinde …</div>
+            </div>
+
+            <div class="panel-body">
+                <form id="slotForm" onsubmit="return submitSlotForm(event)">
+                    <input id="manufacturer" name="manufacturer" placeholder="Hersteller" oninput="updateEmptySpoolWeight(); updateNetFilamentWeight();">
+
+                    <select id="material" name="material">
+                        <option>PLA</option>
+                        <option>PLA Basic</option>
+                        <option>PLA Matte</option>
+                        <option>PLA+</option>
+                        <option>PETG</option>
+			<option>PETG HF</option>
+			<option>ABS</option>
+			<option>ASA</option>
+                        <option>TPU</option>
+                    </select>
+
+                    <div style="display:flex; gap:8px;">
+                        <input type="color" id="color" name="color" value="#3aa6ff" style="width:90px; min-width:90px; padding:4px;">
+                        <input type="text" id="colorHex" value="#3AA6FF" placeholder="#RRGGBB">
+                    </div>
+
+		    <input id="color_name" name="color_name" placeholder="Farbname" oninput="applyHexFromColorName()">
+
+                    <input id="gross_weight" placeholder="Gewogenes Gewicht (g)" type="number" min="0" oninput="updateNetFilamentWeight()">
+<input id="weight" name="weight" type="hidden">
+
+<div style="display:flex; gap:8px;">
+    <input id="empty_spool_weight" placeholder="Leergewicht Spule (g)" type="number" readonly>
+    <input id="net_filament_weight" placeholder="Filamentgewicht (g)" type="number" readonly>
+</div>
+
+                    <input id="location" name="slot" placeholder="Slot" readonly>
+
+                    <button class="action" type="submit">Speichern</button>
+                </form>
+
+                <div class="button-row">
+                    <button class="scan" type="button" onclick="startScanner()">📷 Scan</button>
+                    <button class="print" type="button" onclick="printLabel()">QR Label PDF</button>
+                </div>
+
+                <div class="label-toolbar">
+                    <button class="print" type="button" onclick="printSelectedLabels()">🖨 Ausgewählte Labels</button>
+                    <button class="label-secondary" type="button" onclick="clearLabelSelection()">Auswahl löschen</button>
+                </div>
+
+                <div class="label-toolbar">
+                    <button class="csvbtn" type="button" onclick="exportCSV()">💾 CSV Export</button>
+                    <button class="csvimport" type="button" onclick="document.getElementById('csvImportFile').click()">📂 CSV Import</button>
+                    <input type="file" id="csvImportFile" accept=".csv,text/csv" style="display:none" onchange="importCSVFile(this)">
+                </div>
+
+                <div id="reader"></div>
+                <div class="hint">Farbe ist per Hexcode editierbar. Mehrere belegte Kacheln können für den Sammel-Labeldruck markiert werden.</div>
+            </div>
+        </div>
+
+        <div class="panel">
+            <div class="panel-head">
+                <div>
+                    <div class="panel-title">Übersicht</div>
+                    <div class="brand-sub">Seiten, Filter und aktueller Slot</div>
+                </div>
+            </div>
+            <div class="panel-body">
+                <div class="nav-row">
+    <button id="btn-page-main" class="navbtn active" type="button" onclick="showPage('main')">Seite 1 · Regale + AMS</button>
+    <button id="btn-page-storage" class="navbtn" type="button" onclick="showPage('storage')">Seite 2 · Hauptlager</button>
+    <button id="btn-page-stats" class="navbtn" type="button" onclick="showPage('stats')">Seite 3 · Statistik</button>
+</div>
+
+                <input class="search-box" id="searchBox" placeholder="🔍 Slots filtern, z. B. A1 oder AMS-2-3" oninput="filterSlots(this.value)">
+
+                <div class="kpis">
+                    <div class="kpi">
+                        <div class="kpi-label">Regale</div>
+                        <div class="kpi-value">3 + AMS</div>
+                    </div>
+                    <div class="kpi">
+                        <div class="kpi-label">Slots gesamt</div>
+                        <div class="kpi-value">150</div>
+                    </div>
+                    <div class="kpi">
+                        <div class="kpi-label">Spulen</div>
+                        <div class="kpi-value" id="kpiCount">–</div>
+                    </div>
+                    <div class="kpi">
+                        <div class="kpi-label">Gesamtgewicht</div>
+                        <div class="kpi-value" id="kpiWeight">–</div>
+                    </div>
+                </div>
+
+                <div class="hint">Seite 1 enthält Regal A, B, C und 3 AMS. Seite 2 enthält das Hauptlager.</div>
+                <div class="hint">Aktueller Slot: <strong id="currentSlot">–</strong></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="page-main" class="page active">
+        <div class="wood-rack">
+            <div class="rack-head">
+                <div>
+                    <div class="rack-title">Billy Eiche-Hell · Regal A</div>
+                    <div class="rack-sub">18 Plätze</div>
+                </div>
+                <div class="small-note">Holzoptik</div>
+            </div>
+            <div id="gridA" class="grid grid-a"></div>
+        </div>
+
+        <div class="rack-row">
+            <div class="wood-rack" style="margin-bottom:0;">
+                <div class="rack-head">
+                    <div>
+                        <div class="rack-title">Regal B</div>
+                        <div class="rack-sub">6 Plätze</div>
+                    </div>
+                </div>
+                <div id="gridB" class="grid grid-b"></div>
+            </div>
+
+            <div class="wood-rack" style="margin-bottom:0;">
+                <div class="rack-head">
+                    <div>
+                        <div class="rack-title">Regal C</div>
+                        <div class="rack-sub">6 Plätze</div>
+                    </div>
+                </div>
+                <div id="gridC" class="grid grid-c"></div>
+            </div>
+        </div>
+
+        <div class="ams-wrap">
+            <div class="ams-box">
+                <div class="ams-title">AMS 1</div>
+                <div id="gridAMS1" class="grid grid-ams"></div>
+            </div>
+            <div class="ams-box">
+                <div class="ams-title">AMS 2</div>
+                <div id="gridAMS2" class="grid grid-ams"></div>
+            </div>
+            <div class="ams-box">
+                <div class="ams-title">AMS 3</div>
+                <div id="gridAMS3" class="grid grid-ams"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="page-storage" class="page">
+        <div class="wood-rack">
+            <div class="rack-head">
+                <div>
+                    <div class="rack-title">Hauptlager</div>
+                    <div class="rack-sub">120 Plätze</div>
+                </div>
+                <div class="small-note">Seite 2</div>
+            </div>
+            <div id="gridH" class="grid grid-main"></div>
+        </div>
+    </div>
+</div>
+
+<div id="page-stats" class="page">
+    <div class="wood-rack">
+        <div class="rack-head">
+            <div>
+                <div class="rack-title">Filament Statistik</div>
+                <div class="rack-sub">Material, Hersteller und Gewicht</div>
+            </div>
+            <div class="small-note">Seite 3</div>
+        </div>
+
+        <div id="statsPageContent"></div>
+    </div>
+</div>
+
+<script>
+let selectedSlot = "";
+let html5QrCode = null;
+let selectedLabels = new Set();
+let slotsData = {};
+
+function showPage(page){
+    document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
+    document.getElementById("page-" + page).classList.add("active");
+
+    document.getElementById("btn-page-main").classList.remove("active");
+    document.getElementById("btn-page-storage").classList.remove("active");
+    document.getElementById("btn-page-stats").classList.remove("active");
+
+    if(page === "main"){
+        document.getElementById("btn-page-main").classList.add("active");
+    } else if(page === "storage"){
+        document.getElementById("btn-page-storage").classList.add("active");
+    } else if(page === "stats"){
+        document.getElementById("btn-page-stats").classList.add("active");
+    }
+}
+function setSlot(slot, element){
+    selectedSlot = slot;
+    document.getElementById("location").value = slot;
+    document.getElementById("currentSlot").innerText = slot;
+
+    document.querySelectorAll(".slot").forEach(s => s.classList.remove("slotSelected"));
+    element.classList.add("slotSelected");
+}
+function normalizeColorNameField(){
+    const field = document.getElementById("color_name");
+    if(!field) return true;
+
+    field.value = normalizeColorName(field.value);
+    return true;
+}
+function normalizeHex(value){
+    if(!value) return "#3AA6FF";
+    let v = value.trim().toUpperCase();
+
+    if(!v.startsWith("#")){
+        v = "#" + v;
+    }
+
+    if(/^#[0-9A-F]{6}$/.test(v)){
+        return v;
+    }
+
+    return null;
+}
+
+function csvEscape(value){
+    const str = String(value ?? "");
+    if (/[",;\n]/.test(str)) {
+        return '"' + str.replace(/"/g, '""') + '"';
+    }
+    return str;
+}
+
+function parseCSVLine(line){
+    const result = [];
+    let current = "";
+    let inQuotes = false;
+
+    for(let i = 0; i < line.length; i++){
+        const char = line[i];
+        const next = line[i + 1];
+
+        if(char === '"'){
+            if(inQuotes && next === '"'){
+                current += '"';
+                i++;
+            } else {
+                inQuotes = !inQuotes;
+            }
+        } else if(char === ';' && !inQuotes){
+            result.push(current);
+            current = "";
+        } else {
+            current += char;
+        }
+    }
+
+    result.push(current);
+    return result;
+}
+
+/* ---------- Server-Zugriff (alle Pfade relativ, damit die App auch unter einem Unterpfad läuft) ---------- */
+async function apiSend(method, url, body){
+    let res;
+    try{
+        res = await fetch(url, {
+            method,
+            headers: body ? {"Content-Type": "application/json"} : undefined,
+            body: body ? JSON.stringify(body) : undefined
+        });
+    }catch(e){
+        alert("Server nicht erreichbar. Änderungen sind nur möglich, solange eine Verbindung besteht.");
+        return {ok:false, data:{}};
+    }
+    const data = await res.json().catch(() => ({}));
+    if(res.status === 401){ window.location.reload(); }
+    return {ok: res.ok && !data.error, data};
+}
+
+async function loadSlots(){
+    try{
+        const res = await fetch("api/slots", {cache:"no-store"});
+        if(res.status === 401){ window.location.reload(); return false; }
+        if(!res.ok) throw new Error("HTTP " + res.status);
+        const data = await res.json();
+        slotsData = data.slots || {};
+        const cachedAt = res.headers.get("X-Cached-At");
+        setConnectionState(res.headers.get("X-From-Cache") ? "cache" : "online", cachedAt);
+        return true;
+    }catch(e){
+        slotsData = {};
+        setConnectionState("offline");
+        return false;
+    }
+}
+
+function setConnectionState(state, cachedAt){
+    const pill = document.getElementById("statusPill");
+    if(!pill) return;
+    pill.classList.toggle("offline", state !== "online");
+    if(state === "online"){
+        pill.textContent = "Server läuft";
+    }else if(state === "cache"){
+        const when = cachedAt ? new Date(Number(cachedAt)).toLocaleString("de-DE", {dateStyle:"short", timeStyle:"short"}) : "";
+        pill.textContent = "Offline – Stand " + when;
+    }else{
+        pill.textContent = "Keine Verbindung";
+    }
+}
+
+async function moveFilament(fromSlot, toSlot){
+    const {ok, data} = await apiSend("POST", "api/move", {from_slot: fromSlot, to_slot: toSlot});
+    if(!ok){
+        alert(data.error || "Verschieben fehlgeschlagen.");
+        return false;
+    }
+    window.location.reload();
+    return true;
+}
+
+async function deleteFilament(slotId){
+    if(!confirm("Filament aus " + slotId + " löschen?")) return;
+    const {ok, data} = await apiSend("DELETE", "api/slots/" + encodeURIComponent(slotId));
+    if(!ok){
+        alert(data.error || "Löschen fehlgeschlagen.");
+        return;
+    }
+    window.location.reload();
+}
+
+async function submitSlotForm(ev){
+    ev.preventDefault();
+    normalizeColorNameField();
+    const slot = document.getElementById("location").value.trim();
+    if(!slot){
+        alert("Bitte zuerst einen Slot im Regal auswählen.");
+        return false;
+    }
+    const {ok, data} = await apiSend("POST", "api/slots", {
+        slot,
+        manufacturer: document.getElementById("manufacturer").value.trim(),
+        material: document.getElementById("material").value,
+        color: document.getElementById("color").value,
+        color_name: document.getElementById("color_name").value.trim(),
+        weight: parseInt(document.getElementById("weight").value, 10) || 0
+    });
+    if(!ok){
+        alert(data.error || "Speichern fehlgeschlagen.");
+        return false;
+    }
+    window.location.reload();
+    return false;
+}
+
+function tintFromColor(hex){
+    if(!hex || typeof hex !== "string") return "rgba(58,166,255,0.18)";
+    let clean = hex.replace("#", "").trim();
+    if(clean.length === 3){
+        clean = clean.split("").map(ch => ch + ch).join("");
+    }
+    if(clean.length !== 6) return "rgba(58,166,255,0.18)";
+    const r = parseInt(clean.slice(0,2), 16);
+    const g = parseInt(clean.slice(2,4), 16);
+    const b = parseInt(clean.slice(4,6), 16);
+    return `rgba(${r}, ${g}, ${b}, 0.28)`;
+}
+
+function toggleLabelSelection(slotId, checked, slotElement){
+    if(checked){
+        selectedLabels.add(slotId);
+        slotElement.classList.add("selected-for-label");
+    } else {
+        selectedLabels.delete(slotId);
+        slotElement.classList.remove("selected-for-label");
+    }
+}
+
+function clearLabelSelection(){
+    selectedLabels.clear();
+    document.querySelectorAll(".slot-label-check").forEach(cb => cb.checked = false);
+    document.querySelectorAll(".slot").forEach(slot => slot.classList.remove("selected-for-label"));
+}
+function updateEmptySpoolWeight(){
+    const manufacturerField = document.getElementById("manufacturer");
+    const emptyField = document.getElementById("empty_spool_weight");
+
+    if(!manufacturerField || !emptyField) return;
+
+    const manufacturer = String(manufacturerField.value || "").trim();
+    const emptyWeight = emptySpoolWeights[manufacturer] || 0;
+
+    emptyField.value = emptyWeight ? String(emptyWeight) : "";
+}
+
+function updateNetFilamentWeight(){
+    const grossField = document.getElementById("gross_weight");
+    const emptyField = document.getElementById("empty_spool_weight");
+    const netField = document.getElementById("net_filament_weight");
+    const weightField = document.getElementById("weight");
+
+    if(!grossField || !emptyField || !netField || !weightField) return;
+
+    const gross = parseInt(grossField.value || "0", 10) || 0;
+    const empty = parseInt(emptyField.value || "0", 10) || 0;
+
+    const net = gross - empty;
+    const safeNet = net > 0 ? net : 0;
+
+    netField.value = String(safeNet);
+    weightField.value = String(safeNet);
+}
+function exportCSV(){
+    const header = ["slot","manufacturer","material","color","weight","color_name"];
+    const rows = [header.join(";")];
+
+    Object.keys(slotsData).sort().forEach(slotId => {
+        const item = slotsData[slotId];
+        rows.push([
+            csvEscape(slotId),
+            csvEscape(item.manufacturer || ""),
+            csvEscape(item.material || ""),
+            csvEscape(item.color || ""),
+            csvEscape(item.weight || 0),
+            csvEscape(item.color_name || "")
+        ].join(";"));
+    });
+
+    const blob = new Blob(["\uFEFF" + rows.join("\n")], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const now = new Date();
+    const filename = `filament_export_${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-${String(now.getDate()).padStart(2,"0")}.csv`;
+
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+}
+
+async function addFilamentToServer(row){
+    const {ok} = await apiSend("POST", "api/slots", {
+        slot: row.slot,
+        manufacturer: row.manufacturer,
+        material: row.material,
+        color: row.color,
+        color_name: row.color_name || "",
+        weight: parseInt(row.weight, 10) || 0
+    });
+    return ok;
+}
+
+async function importCSVFile(input){
+    const file = input.files && input.files[0];
+    if(!file) return;
+
+    const text = await file.text();
+    const lines = text.replace(/\r/g, "").split("\n").filter(line => line.trim() !== "");
+
+    if(lines.length < 2){
+        alert("CSV ist leer oder ungültig.");
+        input.value = "";
+        return;
+    }
+
+    const headers = parseCSVLine(lines[0]).map(h => h.trim().toLowerCase());
+    const required = ["slot","manufacturer","material","color","weight"];
+
+    const missing = required.filter(r => !headers.includes(r));
+    if(missing.length){
+        alert("CSV-Spalten fehlen: " + missing.join(", "));
+        input.value = "";
+        return;
+    }
+
+    const idx = {
+        slot: headers.indexOf("slot"),
+        manufacturer: headers.indexOf("manufacturer"),
+        material: headers.indexOf("material"),
+        color: headers.indexOf("color"),
+        weight: headers.indexOf("weight"),
+        color_name: headers.indexOf("color_name")
+    };
+
+    const rows = [];
+    for(let i = 1; i < lines.length; i++){
+        const cols = parseCSVLine(lines[i]);
+        const row = {
+            slot: (cols[idx.slot] || "").trim(),
+            manufacturer: (cols[idx.manufacturer] || "").trim(),
+            material: (cols[idx.material] || "").trim(),
+            color: normalizeHex((cols[idx.color] || "").trim()) || "#3AA6FF",
+            weight: String(parseInt((cols[idx.weight] || "0").trim(), 10) || 0),
+            color_name: idx.color_name >= 0 ? (cols[idx.color_name] || "").trim() : ""
+        };
+
+        if(row.slot && row.manufacturer){
+            rows.push(row);
+        }
+    }
+
+    if(!rows.length){
+        alert("Keine gültigen Datensätze in der CSV gefunden.");
+        input.value = "";
+        return;
+    }
+
+    if(!confirm(`${rows.length} Datensätze importieren? Vorhandene Slots werden dabei überschrieben.`)){
+        input.value = "";
+        return;
+    }
+
+    let success = 0;
+    for(const row of rows){
+        const ok = await addFilamentToServer(row);
+        if(ok) success++;
+    }
+
+    alert(`${success} von ${rows.length} Datensätzen importiert.`);
+    input.value = "";
+    window.location.reload();
+}
+
+function createSlotElement(slotId){
+    const div = document.createElement("div");
+    div.className = "slot";
+    div.setAttribute("data-slot", slotId);
+
+    div.onclick = function(){
+        setSlot(slotId, div);
+    };
+
+    div.ondragover = function(e){
+        e.preventDefault();
+        div.classList.add("dragover");
+    };
+
+    div.ondragleave = function(){
+        div.classList.remove("dragover");
+    };
+
+    div.ondrop = async function(e){
+        e.preventDefault();
+        div.classList.remove("dragover");
+
+        const fromSlot = e.dataTransfer.getData("text/plain");
+        const toSlot = slotId;
+
+        if(!fromSlot || fromSlot === toSlot){
+            return;
+        }
+
+        if(slotsData[toSlot]){
+            alert("Zielslot ist bereits belegt.");
+            return;
+        }
+
+        await moveFilament(fromSlot, toSlot);
+    };
+
+    const item = slotsData[slotId];
+
+    if(item){
+        const tint = tintFromColor(item.color);
+        div.style.background = `linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,0)), linear-gradient(135deg, ${tint}, rgba(38,45,56,.96))`;
+
+        div.innerHTML = `
+            <button class="delete-btn" type="button">×</button>
+            <input class="slot-label-check" type="checkbox" title="Für Labeldruck auswählen">
+            <div class="slot-inner">
+                <div class="slot-item" draggable="true">
+                    <div class="slot-color ${
+    item.color_name === 'Rainbow' || item.color_name === 'Multicolor'
+        ? 'rainbow-tile'
+        : item.color_name === 'Galaxy'
+        ? 'galaxy-tile'
+        : ''
+}"
+style="${
+    item.color_name === 'Rainbow' ||
+    item.color_name === 'Multicolor' ||
+    item.color_name === 'Galaxy'
+        ? ''
+        : `background:${item.color || '#3aa6ff'};`
+}">
+</div>
+                    <div class="slot-manufacturer">${item.manufacturer || "-"}</div>
+                    <div class="slot-material">${item.material || "-"}</div>	      
+                    <div class="slot-id">${item.color_name || slotId}</div>
+		    <div class="slot-meta">${item.weight || 0}g</div>
+		    <div class="slot-length ${getLengthClass(item)}">${calculateFilamentMeters(item)}m</div>
+                </div>
+            </div>
+        `;
+
+        const dragItem = div.querySelector(".slot-item");
+        dragItem.addEventListener("dragstart", function(e){
+            e.dataTransfer.setData("text/plain", slotId);
+        });
+
+        const deleteBtn = div.querySelector(".delete-btn");
+        deleteBtn.addEventListener("click", function(e){
+            e.stopPropagation();
+            deleteFilament(slotId);
+        });
+
+        const check = div.querySelector(".slot-label-check");
+        check.checked = selectedLabels.has(slotId);
+
+        if(check.checked){
+            div.classList.add("selected-for-label");
+        }
+
+        check.addEventListener("click", function(e){
+            e.stopPropagation();
+        });
+
+        check.addEventListener("change", function(e){
+            toggleLabelSelection(slotId, e.target.checked, div);
+        });
+    } else {
+        div.innerHTML = `
+            <div class="slot-inner">
+                <div class="slot-empty">${slotId}</div>
+            </div>
+        `;
+    }
+
+    return div;
+}
+
+function buildSlots(containerId, prefix, count){
+    const container = document.getElementById(containerId);
+    container.innerHTML = "";
+    for(let i=0;i<count;i++){
+        container.appendChild(createSlotElement(prefix + i));
+    }
+}
+
+function buildAMS(containerId, amsNumber){
+    const container = document.getElementById(containerId);
+    container.innerHTML = "";
+    for(let i=1;i<=4;i++){
+        container.appendChild(createSlotElement(`AMS-${amsNumber}-${i}`));
+    }
+}
+const emptySpoolWeights = {
+    "Bambu": 250,
+    "Sunlu": 165,
+    "Kexcelled": 240,
+    "Kex": 240,
+    "Geeetech": 190,
+    "Geeet": 190,
+    "Strong": 130,
+    "Amazon": 240,
+    "Esun": 150,
+    "Eryone": 156,
+    "Elegoo": 160,
+    "Ziro": 160,
+};
+const filamentMetersPerKg = {
+    "PLA": 335,
+    "PLA Basic": 335,
+    "PLA Matte": 335,
+    "PLA Silk": 335,
+    "PETG": 330,
+    "PETG HF": 330,
+    "ABS": 350,
+    "ASA": 350,
+    "TPU": 340
+};
+function calculateFilamentMeters(item){
+    const weight = parseInt(item.weight || 0,10) || 0;
+    const material = item.material || "";
+
+    const metersPerKg = filamentMetersPerKg[material] || 335;
+
+    const meters = (weight / 1000) * metersPerKg;
+
+    return Math.round(meters);
+}
+function getLengthClass(item){
+    const meters = calculateFilamentMeters(item);
+
+    if(meters < 20) return "length-critical";
+    if(meters < 60) return "length-warning";
+
+    return "";
+}
+// ===== Barcode / Filament Datenbank =====
+
+const filamentCatalog = {
+    Bambu: {
+        colors: {
+            "Jade White": "#FFFFFF",
+			"Ivory White": "#F2FEDE",
+            "Light Gray": "#D1D3D5",
+            "Gray": "#8E9089",
+            "Dark Gray": "#545454",
+            "Red": "#C12E1F",
+            "Magenta": "#EC008C",
+            "Orange": "#FF6A13",
+            "Sunflower Yellow": "#FEC600",
+            "Bambu Green": "#00AE42",
+            "Cyan": "##00AEEF",
+            "Blue": "#0057B8",
+            "Purple": "#6A0DAD",
+            "Matte White": "#F5F5F5",
+            "Matte Gray": "#8A8A8A",
+            "Matte Black": "#1E1E1E",
+            "Matte Red": "#C0392B",
+            "Matte Orange": "#E67E22",
+            "Matte Yellow": "#F1C40F",
+            "Matte Green": "#27AE60",
+            "Matte Blue": "#2980B9",
+            "Matte Purple": "#8E44AD",
+            "Black": "#111111",
+            "White": "#FFFFFF"
+        }
+    },
+
+    Sunlu: {
+        colors: {
+            "White": "#FFFFFF",
+            "Black": "#111111",
+            "Gray": "#808080",
+            "Red": "#D91E18",
+            "Orange": "#FF7F00",
+            "Yellow": "#FFD400",
+            "Green": "#2ECC71",
+            "Blue": "#3498DB",
+            "Purple": "#9B59B6"
+        }
+    },
+
+    Kexcelled: {
+        colors: {
+            "Matte White": "#F5F5F5",
+            "Matte Gray": "#8A8A8A",
+            "Matte Black": "#1E1E1E",
+            "Cherry Red": "#B03A2E",
+            "Terracotta": "#AA776D",
+            "Beige": "#D8C3A5",
+            "Mint Green": "#98D8C8",
+            "Salbeigrün": "#A8BFA6",
+            "Ice Blue": "#A9D6E5",
+            "Lavender": "#B8A9D9",
+            "Navy Blue": "#355C7D",
+            "Warm Gray": "#ABA398",
+            "White": "#FFFFFF",
+            "Black": "#111111",
+            "Gray": "#808080",
+            "Red": "#C0392B",
+            "Orange": "#FF7F00",
+            "Yellow": "#FFD400",
+            "Green": "#27AE60",
+            "Blue": "#2980B9",
+            "Ash Purple": "#8A6E75"
+        }
+    }
+};
+
+
+const colorNameMap = {
+"#FFFFFF":"White",
+"#F5F5F5":"Matte White",
+"#F2FEDE":"Ivory White",
+"#F7E6DE":"Beige",
+"#F5E6C8":"Cream",
+"#D8C3A5":"Beige",
+"#D1D3D5":"Light Gray",
+"#C0C0C0":"Silver",
+"#ABA398":"Warm Gray",
+"#A9D6E5":"Ice Blue",
+"#A8BFA6":"Salbeigrün",
+"#98D8C8":"Mint Green",
+"#8E9089":"Gray",
+"#8A8A8A":"Matte Gray",
+"#8A6E75":"Ash Purple",
+"#6A0DAD":"Purple",
+"#6E7F8D":"Blue Gray",
+"#545454":"Dark Gray",
+"#355C7D":"Navy Blue",
+"#3498DB":"Blue",
+"#2ECC71":"Green",
+"#2980B9":"Matte Blue",
+"#27AE60":"Matte Green",
+"#1E1E1E":"Charcoal",
+"#111111":"Black",
+"#00AEEF":"Cyan",
+"#00AE42":"Bambu Green",
+"#0057B8":"Blue",
+"#FF7F00":"Orange",
+"#FF6A13":"Orange",
+"#FFD400":"Yellow",
+"#FEC600":"Sunflower Yellow",
+"#EC008C":"Magenta",
+"#C12E1F":"Red",
+"#C0392B":"Matte Red",
+"#B03A2E":"Cherry Red",
+"#B87333":"Peanut Brown",
+"#AA776D":"Terracotta",
+"#B8A9D9":"Lavender"
+};
+
+function suggestColorName(){
+    const hexField = document.getElementById("colorHex");
+    const nameField = document.getElementById("colorName");
+    if(!hexField || !nameField) return;
+    if((nameField.value || "").trim() !== "") return;
+
+    const normalized = normalizeHex(hexField.value || "");
+    if(normalized && colorNameMap[normalized]){
+        nameField.value = colorNameMap[normalized];
+    }
+}
+
+const filamentBarcodeMap = {
+
+"6975337037385":{manufacturer:"Bambu",material:"PLA Basic",color:"Cyan",color_hex:"#00AEEF"},
+"6975337031116":{manufacturer:"Bambu",material:"PLA Basic",color:"Black",color_hex:"#111111"},
+"6975337031123":{manufacturer:"Bambu",material:"PLA Basic",color:"White",color_hex:"#FFFFFF"},
+"6975337031130":{manufacturer:"Bambu",material:"PLA Basic",color:"Gray",color_hex:"#8E9089"},
+"6975337031147":{manufacturer:"Bambu",material:"PLA Basic",color:"Red",color_hex:"#C12E1F"},
+"6975337031154":{manufacturer:"Bambu",material:"PLA Basic",color:"Orange",color_hex:"#FF6A13"},
+"6975337031161":{manufacturer:"Bambu",material:"PLA Basic",color:"Yellow",color_hex:"#FEC600"},
+"6975337031178":{manufacturer:"Bambu",material:"PLA Basic",color:"Green",color_hex:"#00AE42"},
+"6975337031185":{manufacturer:"Bambu",material:"PLA Basic",color:"Blue",color_hex:"#0057B8"},
+"6975337031192":{manufacturer:"Bambu",material:"PLA Basic",color:"Purple",color_hex:"#6A0DAD"},
+
+"6975337030102":{manufacturer:"Bambu",material:"PLA Matte",color:"Charcoal",color_hex:"#1E1E1E"},
+"6975337032106":{manufacturer:"Bambu",material:"PLA Matte",color:"White",color_hex:"#F5F5F5"},
+"6975337032113":{manufacturer:"Bambu",material:"PLA Matte",color:"Black",color_hex:"#1E1E1E"},
+"6975337032120":{manufacturer:"Bambu",material:"PLA Matte",color:"Gray",color_hex:"#8A8A8A"},
+"6975337032137":{manufacturer:"Bambu",material:"PLA Matte",color:"Red",color_hex:"#C0392B"},
+"6975337032144":{manufacturer:"Bambu",material:"PLA Matte",color:"Blue",color_hex:"#2980B9"},
+
+"6977252424714":{manufacturer:"Bambu",material:"PETG",color:"Peanut Brown",color_hex:"#B87333"},
+"6977252424691":{manufacturer:"Bambu",material:"PETG",color:"Cream",color_hex:"#F5E6C8"},
+"6977252423100":{manufacturer:"Bambu",material:"PETG",color:"Black",color_hex:"#111111"},
+"6977252423117":{manufacturer:"Bambu",material:"PETG",color:"White",color_hex:"#FFFFFF"},
+"6977252423124":{manufacturer:"Bambu",material:"PETG",color:"Gray",color_hex:"#8E9089"},
+"6977252423131":{manufacturer:"Bambu",material:"PETG",color:"Blue",color_hex:"#0057B8"},
+"6977252423148":{manufacturer:"Bambu",material:"PETG",color:"Red",color_hex:"#C12E1F"},
+
+"6977252424104":{manufacturer:"Bambu",material:"ABS",color:"Black",color_hex:"#111111"},
+"6977252424111":{manufacturer:"Bambu",material:"ABS",color:"White",color_hex:"#FFFFFF"},
+"6975337039563":{manufacturer:"Bambu",material:"ABS",color:"Silver",color_hex:"#C0C0C0"},
+
+"104876000093":{manufacturer:"Bambu",material:"ASA",color:"Black",color_hex:"#111111"}
+
+};
+function rememberUnknownBarcode(code){
+
+if(!code) return;
+
+if(!filamentBarcodeMap[code]){
+
+console.log("Neuer Barcode erkannt:", code);
+console.log("Bitte in filamentBarcodeMap eintragen.");
+
+}
+
+}
+
+function applyFilamentData(data){
+    if(data.manufacturer){
+        document.getElementById("manufacturer").value = data.manufacturer;
+    }
+
+    if(data.material){
+        const materialSelect = document.getElementById("material");
+        const hasOption = Array.from(materialSelect.options).some(opt => opt.value === data.material);
+        if(hasOption){
+            materialSelect.value = data.material;
+        }
+    }
+
+    if(document.getElementById("color_name")){
+        if(data.color_name){
+            document.getElementById("color_name").value = data.color_name;
+        } else if(data.color && !String(data.color).startsWith("#")){
+            document.getElementById("color_name").value = data.color;
+        }
+    }
+
+    const hex = data.color_hex || (data.color && String(data.color).startsWith("#") ? data.color : "");
+    if(hex){
+        const normalized = normalizeHex(hex);
+        if(normalized){
+            document.getElementById("color").value = normalized;
+            document.getElementById("colorHex").value = normalized;
+        }
+    }
+updateEmptySpoolWeight();
+updateNetFilamentWeight();
+}
+function parseTextBarcode(rawText){
+    const upper = String(rawText || "").toUpperCase();
+
+    let manufacturer = "";
+    let material = "";
+    let color = "";
+    let color_hex = "";
+
+    if(upper.includes("BAMBU")) manufacturer = "Bambu";
+    else if(upper.includes("SUNLU")) manufacturer = "Sunlu";
+    else if(upper.includes("KEX") || upper.includes("KEXCELLED")) manufacturer = "Kexcelled";
+
+    if(upper.includes("PLA MATTE")) material = "PLA Matte";
+    else if(upper.includes("PLA BASIC")) material = "PLA Basic";
+    else if(upper.includes("PLA")) material = "PLA";
+    else if(upper.includes("PETG")) material = "PETG";
+    else if(upper.includes("PLA")) material = "PLA";
+
+    if(manufacturer && filamentCatalog[manufacturer]){
+        const colors = filamentCatalog[manufacturer].colors;
+        for(const [name, hex] of Object.entries(colors)){
+            if(upper.includes(name.toUpperCase())){
+                color = name;
+                color_hex = hex;
+                break;
+            }
+        }
+    }
+
+    if(!manufacturer && !material && !color_hex){
+        return null;
+    }
+
+    return { manufacturer, material, color, color_hex };
+}
+function applyDefaultWeightForSlot(slotValue){
+    if(!slotValue) return;
+
+    // Hauptlager H0-H80 => automatisch 1000g
+    if(slotValue.startsWith("H")){
+        const weightInput = document.getElementById("weight");
+        const currentWeight = (weightInput.value || "").trim();
+
+        if(currentWeight === "" || currentWeight === "0"){
+            weightInput.value = "1000";
+        }
+    }
+}
+function cameraProblem(err){
+    const name = (err && (err.name || err.message || String(err))) || "unbekannt";
+    const n = String(name);
+    if(!window.isSecureContext){
+        return "Die Seite ist nicht über HTTPS geöffnet (" + location.protocol + "//" + location.host + "). Der Browser sperrt die Kamera deshalb. Bitte die Adresse mit https:// und dem HTTPS-Port (z. B. https://192.168.1.50:8443) öffnen.";
+    }
+    if(/NotAllowed|Permission/i.test(n)){
+        return "Der Zugriff auf die Kamera ist blockiert. Im Browser auf das Schloss-/Einstellungssymbol neben der Adresse tippen → Berechtigungen → Kamera → Erlauben. (Android: Einstellungen → Apps → Browser → Berechtigungen → Kamera.)";
+    }
+    if(/NotFound|DevicesNotFound/i.test(n)) return "Keine Kamera gefunden.";
+    if(/NotReadable|TrackStart|Could not start/i.test(n)) return "Die Kamera wird gerade von einer anderen App benutzt. Andere Apps schließen und erneut versuchen.";
+    return "Kamera konnte nicht gestartet werden (" + n + ").";
+}
+
+function startScanner(){
+    const reader = document.getElementById("reader");
+    reader.innerHTML = "";
+
+    if(!window.isSecureContext || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+        alert(cameraProblem());
+        return;
+    }
+
+    const lockedSlot = document.getElementById("location").value || selectedSlot;
+
+    if(html5QrCode){
+        try{ html5QrCode.stop().catch(() => {}); }catch(e){}
+        html5QrCode = null;
+    }
+
+    html5QrCode = new Html5Qrcode("reader");
+
+    const scanConfig = {
+        fps: 10,
+        qrbox: 250,
+        formatsToSupport: [
+            Html5QrcodeSupportedFormats.QR_CODE,
+            Html5QrcodeSupportedFormats.EAN_13,
+            Html5QrcodeSupportedFormats.EAN_8,
+            Html5QrcodeSupportedFormats.CODE_128
+        ]
+    };
+
+    // Direkt die Rückkamera anfordern (fragt die Erlaubnis selbst an); erst danach auf eine beliebige Kamera ausweichen.
+    const startWith = (cameraConfig, onDecoded) =>
+        html5QrCode.start(cameraConfig, scanConfig, onDecoded);
+
+    const onDecoded = (decodedText) => {
+                 const restoreSlot = () => {
+    if(lockedSlot){
+        selectedSlot = lockedSlot;
+        document.getElementById("location").value = lockedSlot;
+        document.getElementById("currentSlot").innerText = lockedSlot;
+        applyDefaultWeightForSlot(lockedSlot);
+    }
+};
+
+                try{
+                    const raw = String(decodedText || "").trim();
+
+			rememberUnknownBarcode(raw);
+
+                    // 1) QR-Code mit JSON
+                    if(raw.startsWith("{")){
+                        const parsed = JSON.parse(raw);
+                        applyFilamentData(parsed);
+
+                        if(parsed.weight){
+                            document.getElementById("weight").value = parsed.weight;
+                        }
+
+                        restoreSlot();
+                        html5QrCode.stop().catch(() => {});
+                        return;
+                    }
+
+                    // 2) Exakter Barcode aus lokaler Mapping-Tabelle
+                    if(filamentBarcodeMap[raw]){
+                        applyFilamentData(filamentBarcodeMap[raw]);
+
+                        restoreSlot();
+                        html5QrCode.stop().catch(() => {});
+                        return;
+                    }
+
+                    // 3) Text-Barcode automatisch auswerten
+                    const parsed = parseTextBarcode(raw);
+                    if(parsed && (parsed.manufacturer || parsed.material || parsed.color_hex)){
+                        applyFilamentData(parsed);
+
+                        restoreSlot();
+                        html5QrCode.stop().catch(() => {});
+                        return;
+                    }
+
+                    // 4) Fallback: unbekannter Code
+                    document.getElementById("manufacturer").value = raw;
+                    restoreSlot();
+
+                } catch(err){
+                    document.getElementById("manufacturer").value = decodedText;
+                    restoreSlot();
+                }
+
+                if(selectedSlot === ""){
+                    alert("Bitte zuerst Slot auswählen");
+                }
+
+                html5QrCode.stop().catch(() => {});
+    };
+
+    startWith({ facingMode: "environment" }, onDecoded).catch(firstErr => {
+        // Berechtigung verweigert: nicht erneut versuchen, sondern erklären
+        if(/NotAllowed|Permission/i.test(String(firstErr && (firstErr.name || firstErr)))){
+            alert(cameraProblem(firstErr));
+            return;
+        }
+        Html5Qrcode.getCameras().then(devices => {
+            if(!devices.length){ alert("Keine Kamera gefunden."); return; }
+            let cameraId = devices[0].id;
+            devices.forEach(d => { if(/back|rear|environment/i.test(d.label || "")) cameraId = d.id; });
+            return startWith(cameraId, onDecoded);
+        }).catch(err => alert(cameraProblem(err || firstErr)));
+    });
+}
+function printLabel(){
+    const manufacturer = document.getElementById("manufacturer").value.trim();
+    const material = document.getElementById("material").value.trim();
+    const weight = document.getElementById("weight").value.trim();
+    const color = normalizeHex(document.getElementById("colorHex").value) || "#3AA6FF";
+
+    if(!manufacturer){
+        alert("Bitte zuerst Hersteller eingeben oder QR scannen.");
+        return;
+    }
+
+    const qrContent = JSON.stringify({
+    manufacturer: manufacturer,
+    material: material,
+    color_name: document.getElementById("color_name").value || "",
+    weight: weight || "0",
+    color_hex: color
+});
+
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({
+        orientation: "Landscape",
+        unit: "mm",
+        format: [60,30]
+    });
+
+    const canvas = document.createElement("canvas");
+
+    QRCode.toCanvas(canvas, qrContent, function(err){
+        if(err){
+            alert("QR-Erstellung fehlgeschlagen.");
+            return;
+        }
+
+        const img = canvas.toDataURL("image/png");
+
+        pdf.addImage(img, "PNG", 2, 2, 26, 26);
+
+        pdf.setFillColor(color);
+        pdf.roundedRect(31, 3, 25, 4, 1, 1, "F");
+
+        pdf.setFont("helvetica", "bold");
+        pdf.setFontSize(9);
+        pdf.text(manufacturer, 31, 12, { maxWidth: 27 });
+
+        pdf.setFont("helvetica", "normal");
+        pdf.setFontSize(8);
+        pdf.text(material || "-", 31, 19);
+        pdf.text((weight || "0") + " g", 31, 25);
+
+        pdf.save("filament_label.pdf");
+    });
+}
+
+function printSelectedLabels(){
+    const selectedItems = Array.from(selectedLabels)
+        .map(slotId => ({ slotId, item: slotsData[slotId] }))
+        .filter(entry => entry.item);
+
+    if(!selectedItems.length){
+        alert("Bitte mindestens eine belegte Kachel auswählen.");
+        return;
+    }
+
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({
+        orientation: "Portrait",
+        unit: "mm",
+        format: "a4"
+    });
+
+    const labelWidth = 60;
+    const labelHeight = 30;
+    const marginX = 12;
+    const marginY = 10;
+    const gapX = 3;
+    const gapY = 4;
+    const perRow = 3;
+    const perPage = perRow * 8;
+
+    let index = 0;
+
+    function addOneLabel(entry, done){
+        if(index > 0 && index % perPage === 0){
+            pdf.addPage();
+        }
+
+        const pageIndex = index % perPage;
+        const actualCol = pageIndex % perRow;
+        const actualRow = Math.floor(pageIndex / perRow);
+
+        const x = marginX + actualCol * (labelWidth + gapX);
+        const y = marginY + actualRow * (labelHeight + gapY);
+
+        const manufacturer = entry.item.manufacturer || "-";
+        const material = entry.item.material || "-";
+        const weight = entry.item.weight || 0;
+        const color = normalizeHex(entry.item.color || "#3AA6FF") || "#3AA6FF";
+
+        const qrContent = JSON.stringify({
+    manufacturer: manufacturer,
+    material: material,
+    color_name: entry.item.color_name || "",
+    weight: String(weight),
+    color_hex: color
+});
+
+        const canvas = document.createElement("canvas");
+
+        QRCode.toCanvas(canvas, qrContent, function(err){
+            if(err){
+                index++;
+                done();
+                return;
+            }
+
+            const img = canvas.toDataURL("image/png");
+
+            pdf.roundedRect(x, y, labelWidth, labelHeight, 2, 2);
+            pdf.addImage(img, "PNG", x + 2, y + 2, 26, 26);
+
+            pdf.setFillColor(color);
+            pdf.roundedRect(x + 31, y + 3, 25, 4, 1, 1, "F");
+
+            pdf.setFont("helvetica", "bold");
+            pdf.setFontSize(9);
+            pdf.text(manufacturer, x + 31, y + 12, { maxWidth: 25 });
+
+            pdf.setFont("helvetica", "normal");
+            pdf.setFontSize(8);
+            pdf.text(material, x + 31, y + 19);
+     	    pdf.text(entry.item.color_name || "-", x + 31, y + 23);
+   	    pdf.text(String(weight) + " g", x + 31, y + 27);
+
+            index++;
+            done();
+        });
+    }
+
+    function processNext(i){
+        if(i >= selectedItems.length){
+            pdf.save("filament_labels_selected.pdf");
+            return;
+        }
+
+        addOneLabel(selectedItems[i], function(){
+            processNext(i + 1);
+        });
+    }
+
+    processNext(0);
+}
+
+function filterSlots(value){
+    const t = value.toLowerCase().trim();
+    document.querySelectorAll(".slot").forEach(slot => {
+        const match = slot.dataset.slot.toLowerCase().includes(t);
+        slot.style.opacity = (!t || match) ? "1" : "0.22";
+    });
+}
+
+document.getElementById("color").addEventListener("input", function(){
+    document.getElementById("colorHex").value = this.value.toUpperCase();
+    suggestColorName();
+});
+
+document.getElementById("colorHex").addEventListener("input", function(){
+    const normalized = normalizeHex(this.value);
+    if(normalized){
+        document.getElementById("color").value = normalized;
+        this.value = normalized;
+        suggestColorName();
+    }
+});
+
+function normalizeColorName(name){
+    const raw = String(name || "").trim();
+    if(!raw) return "";
+
+    const cleaned = raw
+        .toLowerCase()
+        .replace(/-/g," ")
+        .replace(/_/g," ")
+        .replace(/\s+/g," ")
+        .trim();
+
+    const map = {
+        // Black / White / Gray
+        "schwarz": "Black",
+        "black": "Black",
+
+        "ivoryweiß": "Ivory White",
+
+        "weiß": "White",
+        "weiss": "White",
+        "white": "White",
+
+        "grau": "Gray",
+        "grey": "Gray",
+        "gray": "Gray",
+        "hellgrau": "Light Gray",
+        "light gray": "Light Gray",
+        "dunkelgrau": "Dark Gray",
+        "dark gray": "Dark Gray",
+        "blaugrau": "Blue Gray",
+        "blue gray": "Blue Gray",
+        "bluegrey": "Blue Gray",
+        "graublau": "Blue Gray",
+
+        // Standard colors
+        "blau": "Blue",
+        "blue": "Blue",
+        "himmelblau": "Sky Blue",
+        "sky blue": "Sky Blue",
+        "marineblau": "Navy Blue",
+        "navy blue": "Navy Blue",
+        "eisblau": "Ice Blue",
+        "ice blue": "Ice Blue",
+        "cyan": "Cyan",
+        "türkis": "Turquoise",
+        "tuerkis": "Turquoise",
+        "turquoise": "Turquoise",
+
+        "rot": "Red",
+        "red": "Red",
+        "dunkelrot": "Dark Red",
+        "dark red": "Dark Red",
+        "weinrot": "Burgundy",
+        "burgundy": "Burgundy",
+        "magenta": "Magenta",
+        "pink": "Pink",
+        "rosa": "Pink",
+
+        "orange": "Orange",
+        "mandarine": "Tangerine",
+        "tangerine": "Tangerine",
+        "gelb": "Yellow",
+        "yellow": "Yellow",
+        "sonnengelb": "Sunflower Yellow",
+        "sunflower yellow": "Sunflower Yellow",
+        "gold": "Gold",
+	"bronze": "Bronze",
+	"bronce": "Bronze",
+	"bronze metallic": "Bronze",
+
+        "grün": "Green",
+        "gruen": "Green",
+        "green": "Green",
+        "hellgrün": "Light Green",
+        "hellgruen": "Light Green",
+        "light green": "Light Green",
+        "mintgrün": "Mint Green",
+        "mintgruen": "Mint Green",
+        "mint green": "Mint Green",
+        "salbeigrün": "Sage Green",
+        "salbeigruen": "Sage Green",
+        "sage green": "Sage Green",
+        "olive": "Olive",
+        "bambu green": "Bambu Green",
+        "jade": "Jade White",
+        "jade white": "Jade White",
+
+        "lila": "Purple",
+        "violett": "Purple",
+        "purple": "Purple",
+        "lavendel": "Lavender",
+        "lavender": "Lavender",
+
+        // Browns / neutrals
+        "braun": "Brown",
+        "brown": "Brown",
+        "erdnussbraun": "Peanut Brown",
+        "peanut brown": "Peanut Brown",
+        "kaffee": "Coffee",
+        "coffee": "Coffee",
+        "beige": "Beige",
+        "creme": "Cream",
+        "cream": "Cream",
+        "hautfarbe": "Skin Tone",
+        "skin tone": "Skin Tone",
+
+        // Metallic / special
+        "silber": "Silver",
+        "silver": "Silver",
+        "charcoal": "Charcoal",
+        "transparent": "Transparent",
+        "durchsichtig": "Transparent",
+        "clear": "Transparent",
+        "translucent": "Translucent",
+
+        // Bambu / common special names
+        "white marble": "White Marble",
+        "ivory white": "Ivory White",
+        "red granite": "Red Granite",
+        "glow yellow": "Glow Yellow",
+        "glow pink": "Glow Pink",
+        "glow blue": "Glow Blue",
+        "glow orange": "Glow Orange",
+
+        // fantasy / multi-color
+        "regenbogen": "Rainbow",
+        "rainbow": "Rainbow",
+        "multicolor": "Multicolor",
+        "multicolour": "Multicolor",
+        "galaxy": "Galaxy",
+
+	// zusätzliche reale Filamentfarben
+	"mistletoe green":"Mistletoe Green",
+	"mistletoe":"Mistletoe Green",
+
+	"hotpink":"Hot Pink",
+	"hot pink":"Hot Pink",
+
+	"latte":"Latte Brown",
+	"latte brown":"Latte Brown",
+    };
+
+    const key = raw.toLowerCase();
+    return map[key] || raw;
+}
+const colorHexMap = {
+    // neutrals
+    "black":"#111111",
+	"ivory white":"#F2FFDE",
+    "white":"#FFFFFF",
+    "gray":"#8E9089",
+    "grey":"#8E9089",
+    "light gray":"#D1D3D5",
+    "dark gray":"#545454",
+    "blue gray":"#6E7F8D",
+
+    // blues / cyan
+    "blue":"#0057B8",
+    "sky blue":"#87CEEB",
+    "navy blue":"#2C3E50",
+    "ice blue":"#A8D8F0",
+    "cyan":"#00AEEF",
+    "turquoise":"#40E0D0",
+
+    // reds / pinks / purple
+    "red":"#C12E1F",
+    "dark red":"#8B1E1E",
+    "burgundy":"#7B1E3B",
+    "magenta":"#EC008C",
+    "pink":"#FF69B4",
+    "purple":"#6A0DAD",
+    "lavender":"#B57EDC",
+
+    // orange / yellow / gold
+    "orange":"#FF6A13",
+    "tangerine":"#F28500",
+    "yellow":"#FEC600",
+    "sunflower yellow":"#FEC600",
+    "gold":"#D4AF37",
+    "bronze":"#CD7F32",
+
+    // greens
+    "green":"#00AE42",
+    "light green":"#7ED957",
+    "mint green":"#98FF98",
+    "sage green":"#A8BFA6",
+    "olive":"#708238",
+    "bambu green":"#00AE42",
+    "jade white":"#F7F7F2",
+
+    // browns / creams
+    "brown":"#7B4B2A",
+    "peanut brown":"#8A5A2E",
+    "coffee":"#6F4E37",
+    "beige":"#F5F5DC",
+    "cream":"#F3E5C8",
+    "skin tone":"#D8A58A",
+
+    // metallic / special
+    "silver":"#C0C0C0",
+    "charcoal":"#2B2B2B",
+    "transparent":"#D0F0FF",
+    "translucent":"#D0F0FF",
+
+    // officially visible Bambu special examples
+    "white marble":"#F7F3F0",
+    "red granite":"#AD4E38",
+    "glow yellow":"#F8FF80",
+    "glow pink":"#F17B8F",
+    "glow blue":"#7AC0E9",
+    "glow orange":"#FF9D5B",
+    "mistletoe green":"#3A7D44",
+    "hot pink":"#FF1493",
+    "latte brown":"#C8A27C",
+
+    // fantasy / multi-color placeholders
+    "rainbow":"#FF00FF",
+    "multicolor":"#FF00FF",
+    "galaxy":"#222222",
+};
+function applyHexFromColorName(){
+    const nameField = document.getElementById("color_name");
+    if(!nameField) return;
+
+    const normalizedName = normalizeColorName(nameField.value);
+
+    // Feld auf Englisch korrigieren
+    nameField.value = normalizedName;
+
+    const key = normalizedName.toLowerCase();
+
+    if(colorHexMap[key]){
+        const hex = colorHexMap[key];
+
+        document.getElementById("color").value = hex;
+        document.getElementById("colorHex").value = hex.toUpperCase();
+    }
+}
+function renderStatsPage(){
+    const container = document.getElementById("statsPageContent");
+    if(!container) return;
+
+    const materialStats = {};
+    const manufacturerStats = {};
+    const colorNameStats = {};
+
+    Object.values(slotsData).forEach(item => {
+        if(!item) return;
+
+        const material = item.material || "Unbekannt";
+        const manufacturer = item.manufacturer || "Unbekannt";
+        const colorName = item.color_name || "Unbekannt";
+        const weight = parseInt(item.weight || 0, 10) || 0;
+
+        if(!materialStats[material]){
+            materialStats[material] = { count: 0, weight: 0 };
+        }
+        materialStats[material].count += 1;
+        materialStats[material].weight += weight;
+
+        if(!manufacturerStats[manufacturer]){
+            manufacturerStats[manufacturer] = { count: 0, weight: 0 };
+        }
+        manufacturerStats[manufacturer].count += 1;
+        manufacturerStats[manufacturer].weight += weight;
+
+        if(!colorNameStats[colorName]){
+            colorNameStats[colorName] = { count: 0, weight: 0 };
+        }
+        colorNameStats[colorName].count += 1;
+        colorNameStats[colorName].weight += weight;
+    });
+
+    const materialEntries = Object.entries(materialStats).sort((a, b) => b[1].count - a[1].count);
+    const manufacturerEntries = Object.entries(manufacturerStats).sort((a, b) => b[1].count - a[1].count);
+    const colorNameEntries = Object.entries(colorNameStats).sort((a, b) => b[1].count - a[1].count);
+
+    let html = "";
+
+    html += `<div class="stats-section">`;
+    html += `<h3>Nach Material</h3>`;
+    html += `<div class="stats-list">`;
+
+    if(materialEntries.length){
+        materialEntries.forEach(([name, data]) => {
+            html += `
+                <div class="stats-row">
+                    <div class="stats-name">${name}</div>
+                    <div class="stats-meta">${data.count} Rollen · ${data.weight} g</div>
+                </div>
+            `;
+        });
+    } else {
+        html += `<div class="stats-row"><div class="stats-name">Keine Daten</div><div class="stats-meta">0 Rollen · 0 g</div></div>`;
+    }
+
+    html += `</div></div>`;
+
+    html += `<div class="stats-section">`;
+    html += `<h3>Nach Hersteller</h3>`;
+    html += `<div class="stats-list">`;
+
+    if(manufacturerEntries.length){
+        manufacturerEntries.forEach(([name, data]) => {
+            html += `
+                <div class="stats-row">
+                    <div class="stats-name">${name}</div>
+                    <div class="stats-meta">${data.count} Rollen · ${data.weight} g</div>
+                </div>
+            `;
+        });
+    } else {
+        html += `<div class="stats-row"><div class="stats-name">Keine Daten</div><div class="stats-meta">0 Rollen · 0 g</div></div>`;
+    }
+
+    html += `</div></div>`;
+
+    html += `<div class="stats-section">`;
+    html += `<h3>Nach Farbe</h3>`;
+    html += `<div class="stats-list">`;
+
+    if(colorNameEntries.length){
+        colorNameEntries.forEach(([name, data]) => {
+            html += `
+                <div class="stats-row">
+                    <div class="stats-name">${name}</div>
+                    <div class="stats-meta">${data.count} Rollen · ${data.weight} g</div>
+                </div>
+            `;
+        });
+    } else {
+        html += `<div class="stats-row"><div class="stats-name">Keine Daten</div><div class="stats-meta">0 Rollen · 0 g</div></div>`;
+    }
+
+    html += `</div></div>`;
+
+    container.innerHTML = html;
+}
+function sortSlotsByMaterialAndColor(data){
+
+    const entries = Object.entries(data);
+
+    entries.sort((a,b)=>{
+
+        const A = a[1] || {};
+        const B = b[1] || {};
+
+        const matA = (A.material || "").toLowerCase();
+        const matB = (B.material || "").toLowerCase();
+
+        if(matA < matB) return -1;
+        if(matA > matB) return 1;
+
+        const colA = (A.color_name || "").toLowerCase();
+        const colB = (B.color_name || "").toLowerCase();
+
+        if(colA < colB) return -1;
+        if(colA > colB) return 1;
+
+        return 0;
+    });
+
+    return Object.fromEntries(entries);
+}
+function buildSortedStorage(containerId, prefix, count){
+    const container = document.getElementById(containerId);
+    container.innerHTML = "";
+
+    const slotIds = [];
+    for(let i = 0; i < count; i++){
+        slotIds.push(prefix + i);
+    }
+
+    const occupied = slotIds
+        .filter(slotId => slotsData[slotId])
+        .sort((a, b) => {
+            const A = slotsData[a] || {};
+            const B = slotsData[b] || {};
+
+            const materialA = String(A.material || "").toLowerCase();
+            const materialB = String(B.material || "").toLowerCase();
+
+            const materialOrder = {
+                "pla": 1,
+                "pla basic": 2,
+                "pla matte": 3,
+                "pla silk": 4,
+                "petg": 5,
+                "petg hf": 6,
+                "abs": 7,
+                "asa": 8,
+                "tpu": 9
+            };
+
+            const rankA = materialOrder[materialA] || 999;
+            const rankB = materialOrder[materialB] || 999;
+
+            if(rankA < rankB) return -1;
+            if(rankA > rankB) return 1;
+
+            const colorA = String(A.color_name || "").toLowerCase();
+            const colorB = String(B.color_name || "").toLowerCase();
+
+            if(colorA < colorB) return -1;
+            if(colorA > colorB) return 1;
+
+            return 0;
+        });
+
+    const empty = slotIds.filter(slotId => !slotsData[slotId]);
+    const ordered = occupied.concat(empty);
+
+    let lastMaterial = "";
+
+    ordered.forEach((slotId, index) => {
+        const item = slotsData[slotId];
+
+        if(item){
+            const currentMaterial = item.material || "Unbekannt";
+
+            if(currentMaterial !== lastMaterial){
+                const divider = document.createElement("div");
+
+                let materialClass = "material-divider";
+                const m = currentMaterial.toLowerCase();
+
+                if(m.includes("pla")) materialClass += " material-pla";
+                else if(m === "petg") materialClass += " material-petg";
+                else if(m === "petg hf") materialClass += " material-petg-hf";
+                else if(m === "abs") materialClass += " material-abs";
+                else if(m === "asa") materialClass += " material-asa";
+                else if(m === "tpu") materialClass += " material-tpu";
+
+                divider.className = materialClass;
+                divider.textContent = currentMaterial;
+
+                container.appendChild(divider);
+                lastMaterial = currentMaterial;
+            }
+        } else if(index === occupied.length && occupied.length > 0){
+            const divider = document.createElement("div");
+            divider.className = "material-divider";
+            divider.textContent = "Leer";
+            container.appendChild(divider);
+        }
+
+        container.appendChild(createSlotElement(slotId));
+    });
+}async function boot(){
+await loadSlots();
+const count = Object.keys(slotsData).length;
+const weight = Object.values(slotsData).reduce((s, x) => s + (parseInt(x.weight, 10) || 0), 0);
+document.getElementById("kpiCount").textContent = count;
+document.getElementById("kpiWeight").textContent = weight + " g";
+
+buildSlots("gridA", "A", 18);
+buildSlots("gridB", "B", 6);
+buildSlots("gridC", "C", 6);
+slotsDataSorted = sortSlotsByMaterialAndColor(slotsData);
+buildSortedStorage("gridH", "H", 120);
+buildAMS("gridAMS1", 1);
+buildAMS("gridAMS2", 2);
+buildAMS("gridAMS3", 3);
+
+updateEmptySpoolWeight();
+updateNetFilamentWeight();
+
+renderStatsPage();
+suggestColorName();
+}
+boot();
+
+// App-Modus: Service Worker (nicht innerhalb eines Home-Assistant-Rahmens, dort übernimmt HA das Laden)
+if("serviceWorker" in navigator && window.top === window && location.protocol !== "file:"){
+    navigator.serviceWorker.register("sw.js").catch(() => {});
+}
+</script>
+</body>
+</html>

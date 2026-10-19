@@ -1,0 +1,9 @@
+configuration:
+  username:
+    name: Benutzername
+    description: Nur für den direkten Zugriff über den Port (nicht für die Seitenleiste in Home Assistant).
+  password:
+    name: Passwort
+    description: Leer lassen, um den direkten Zugriff ohne Passwort zu erlauben. Für den Zugriff von außerhalb des Heimnetzes unbedingt setzen.
+network:
+  8099/tcp: Direkter Zugriff (App-Installation und Kamera-Scan am Handy)
