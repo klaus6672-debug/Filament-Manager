@@ -743,6 +743,7 @@ letter-spacing:1px;
                 </div>
 
                 <div id="reader"></div>
+                <div class="hint" id="scanStatus" aria-live="polite"></div>
                 <div class="hint">Farbe ist per Hexcode editierbar. Mehrere belegte Kacheln können für den Sammel-Labeldruck markiert werden.</div>
             </div>
         </div>
@@ -1686,8 +1687,13 @@ function startScanner(){
     html5QrCode = new Html5Qrcode("reader");
 
     const scanConfig = {
-        fps: 10,
-        qrbox: 250,
+        fps: 15,
+        // Suchfeld = 80 % der kürzeren Seite, damit auch größere Codes komplett hineinpassen
+        qrbox: (w, h) => { const side = Math.floor(Math.min(w, h) * 0.8); return {width: side, height: side}; },
+        // Auf Handys mit eingebautem Code-Scanner (Chrome/Android) nutzt die Bibliothek diesen: schneller und zuverlässiger
+        experimentalFeatures: { useBarCodeDetectorIfSupported: true },
+        // Höhere Auflösung, sonst sind kleine Codes unscharf
+        videoConstraints: { facingMode: "environment", width: {ideal: 1920}, height: {ideal: 1080} },
         formatsToSupport: [
             Html5QrcodeSupportedFormats.QR_CODE,
             Html5QrcodeSupportedFormats.EAN_13,
@@ -1695,6 +1701,9 @@ function startScanner(){
             Html5QrcodeSupportedFormats.CODE_128
         ]
     };
+
+    const setScanStatus = (text) => { const el = document.getElementById("scanStatus"); if(el) el.textContent = text; };
+    setScanStatus("Kamera läuft … Code ruhig in das Feld halten, nicht zu nah (ca. 15–20 cm), gut beleuchtet.");
 
     // Direkt die Rückkamera anfordern (fragt die Erlaubnis selbst an); erst danach auf eine beliebige Kamera ausweichen.
     const startWith = (cameraConfig, onDecoded) =>
@@ -1712,10 +1721,23 @@ function startScanner(){
 
                 try{
                     const raw = String(decodedText || "").trim();
+                    setScanStatus("Gelesen: " + (raw.length > 80 ? raw.slice(0, 80) + " …" : raw));
 
 			rememberUnknownBarcode(raw);
 
-                    // 1) QR-Code mit JSON
+                    // 0) Label dieser App (kurzes Format)
+                    const label = parseLabelQr(raw);
+                    if(label){
+                        applyFilamentData(label);
+                        if(label.weight && label.weight !== "0"){
+                            document.getElementById("weight").value = label.weight;
+                        }
+                        restoreSlot();
+                        html5QrCode.stop().catch(() => {});
+                        return;
+                    }
+
+                    // 1) QR-Code mit JSON (ältere Labels)
                     if(raw.startsWith("{")){
                         const parsed = JSON.parse(raw);
                         applyFilamentData(parsed);
@@ -1749,6 +1771,7 @@ function startScanner(){
                     }
 
                     // 4) Fallback: unbekannter Code
+                    setScanStatus("Code gelesen, aber unbekannt (kein Filament-Label dieser App). Inhalt steht im Feld Hersteller: " + (raw.length > 60 ? raw.slice(0, 60) + " …" : raw));
                     document.getElementById("manufacturer").value = raw;
                     restoreSlot();
 
@@ -1778,6 +1801,20 @@ function startScanner(){
         }).catch(err => alert(cameraProblem(err || firstErr)));
     });
 }
+/* ---------- QR-Inhalt der Labels: kurz halten, damit der Code grob und damit gut scanbar bleibt ---------- */
+const QR_OPTIONS = {errorCorrectionLevel: "M", margin: 2, scale: 12};
+
+function labelQrText(manufacturer, material, colorName, weight, colorHex){
+    const clean = v => String(v == null ? "" : v).replace(/\|/g, "/").trim();
+    return ["FM1", manufacturer, material, colorName, parseInt(weight, 10) || 0, colorHex].map(clean).join("|");
+}
+
+function parseLabelQr(raw){
+    const parts = String(raw || "").split("|");
+    if(parts[0] !== "FM1" || parts.length < 6) return null;
+    return {manufacturer: parts[1], material: parts[2], color_name: parts[3], weight: parts[4], color_hex: parts[5]};
+}
+
 function printLabel(){
     const manufacturer = document.getElementById("manufacturer").value.trim();
     const material = document.getElementById("material").value.trim();
@@ -1789,13 +1826,7 @@ function printLabel(){
         return;
     }
 
-    const qrContent = JSON.stringify({
-    manufacturer: manufacturer,
-    material: material,
-    color_name: document.getElementById("color_name").value || "",
-    weight: weight || "0",
-    color_hex: color
-});
+    const qrContent = labelQrText(manufacturer, material, document.getElementById("color_name").value, weight, color);
 
     const { jsPDF } = window.jspdf;
     const pdf = new jsPDF({
@@ -1806,7 +1837,7 @@ function printLabel(){
 
     const canvas = document.createElement("canvas");
 
-    QRCode.toCanvas(canvas, qrContent, function(err){
+    QRCode.toCanvas(canvas, qrContent, QR_OPTIONS, function(err){
         if(err){
             alert("QR-Erstellung fehlgeschlagen.");
             return;
@@ -1877,17 +1908,11 @@ function printSelectedLabels(){
         const weight = entry.item.weight || 0;
         const color = normalizeHex(entry.item.color || "#3AA6FF") || "#3AA6FF";
 
-        const qrContent = JSON.stringify({
-    manufacturer: manufacturer,
-    material: material,
-    color_name: entry.item.color_name || "",
-    weight: String(weight),
-    color_hex: color
-});
+        const qrContent = labelQrText(manufacturer, material, entry.item.color_name, weight, color);
 
         const canvas = document.createElement("canvas");
 
-        QRCode.toCanvas(canvas, qrContent, function(err){
+        QRCode.toCanvas(canvas, qrContent, QR_OPTIONS, function(err){
             if(err){
                 index++;
                 done();
