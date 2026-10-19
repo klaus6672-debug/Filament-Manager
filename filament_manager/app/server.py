@@ -312,7 +312,11 @@ def build_ams(states, conn):
                 continue
             tag_owner = by_tag.get(live["tag_uid"]) if live["tag_uid"] else None
             if tag_owner and tag_owner["slot"] == slot:
-                entry["status"] = "ok"
+                if same_material(tag_owner["material"], live):
+                    entry["status"] = "ok"
+                else:  # Es ist dieselbe Spule (Kennung), aber die App führt eine andere Sorte, z. B. Basic statt Matte
+                    entry["status"] = "fix"
+                    entry["action"] = {"kind": "fixmat", "label": f"Sorte → {describe_live(live)['material']}"}
                 continue
             if tag_owner:  # Spule ist bekannt, steckt aber laut App woanders
                 entry["status"] = "moved"
@@ -479,7 +483,7 @@ def summary(low: int = 100):
 
 class AmsApplyIn(BaseModel):
     slot: str = Field(pattern=r"^AMS-[1-3]-[1-4]$")
-    kind: str = Field(pattern=r"^(learn|move|create)$")
+    kind: str = Field(pattern=r"^(learn|move|create|fixmat)$")
     from_slot: str | None = Field(default=None, pattern=r"^[A-Za-z0-9_-]{1,32}$")
 
 
@@ -524,6 +528,11 @@ def ams_apply(item: AmsApplyIn):
                     return JSONResponse({"error": "Nichts zu merken."}, status_code=400)
                 _clear_tag(conn, live["tag_uid"], item.slot)
                 conn.execute("UPDATE filaments SET tag_uid=? WHERE slot=?", (live["tag_uid"], item.slot))
+
+            elif item.kind == "fixmat":
+                if not target:
+                    return JSONResponse({"error": "Der Slot ist leer."}, status_code=400)
+                conn.execute("UPDATE filaments SET material=? WHERE slot=?", (describe_live(live)["material"], item.slot))
 
             elif item.kind == "move":
                 src_slot = item.from_slot

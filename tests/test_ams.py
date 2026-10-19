@@ -157,3 +157,20 @@ def test_color_distance_is_perceptual():
     assert d("#d3b8a7", "#d2bc8a") > 15      # Rosabeige vs. Gelbbeige
     assert d("#ffffff", "#f6f7f1") < 10      # praktisch gleiches Weiß
     assert d("#c12d1f", "#c12e1f") < 1
+
+
+def test_basic_and_matte_are_never_treated_as_identical(client):
+    # Spule mit bekannter Kennung (Bambu PLA Matte, schwarz), in der App aber als "PLA Basic" geführt
+    client.post("/api/ams/apply", json={"slot": "AMS-1-4", "kind": "create"})
+    assert tray(client, "AMS-1-4")["status"] == "ok"
+    put(client, "AMS-1-4", "PLA Basic", "#000000")            # Kennung bleibt erhalten
+    t = tray(client, "AMS-1-4")
+    assert t["status"] == "fix" and t["action"] == {"kind": "fixmat", "label": "Sorte → PLA Matte"}
+    assert client.post("/api/ams/apply", json={"slot": "AMS-1-4", "kind": "fixmat"}).status_code == 200
+    assert client.get("/api/slots").json()["slots"]["AMS-1-4"]["material"] == "PLA Matte"
+    assert tray(client, "AMS-1-4")["status"] == "ok"
+    # Ohne Kennung: gleiche Farbe, aber Basic ↔ Matte -> weicht ab, auch als Kandidat nie vorgeschlagen
+    put(client, "A9", "PLA Basic", "#000000")
+    put(client, "AMS-3-2", "PLA Basic", "#ffffff")
+    t = tray(client, "AMS-3-2")
+    assert t["status"] == "mismatch" and all(c["slot"] != "A9" for c in t["candidates"])

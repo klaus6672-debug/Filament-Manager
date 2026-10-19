@@ -665,7 +665,7 @@ letter-spacing:1px;
 .ams-badge.ok{background:#1f6f43;color:#dfffee}
 .ams-badge.empty{background:#3a4556;color:#cbd5e5}
 .ams-badge.learn{background:#1f5f8f;color:#dff3ff}
-.ams-badge.moved,.ams-badge.missing,.ams-badge.mismatch,.ams-badge.gone{background:#8a5a12;color:#fff1d6}
+.ams-badge.moved,.ams-badge.missing,.ams-badge.mismatch,.ams-badge.gone,.ams-badge.fix{background:#8a5a12;color:#fff1d6}
 .ams-act{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
 .ams-act select{max-width:100%}
 .ams-msg{color:var(--muted);font-size:13px;padding:6px 0}
@@ -2437,7 +2437,7 @@ function amsEsc(v){
 
 const AMS_STATUS = {
     ok: "✓ passt", empty: "leer", learn: "✓ passt", moved: "steckt jetzt hier",
-    mismatch: "weicht ab", missing: "nicht in der App", gone: "Fach leer"
+    mismatch: "weicht ab", missing: "nicht in der App", gone: "Fach leer", fix: "Sorte weicht ab"
 };
 
 function amsSpoolHtml(item, fallback){
@@ -2467,7 +2467,7 @@ function renderAms(data){
             const live = t.live;
             const tile = document.querySelector(`.slot[data-slot="${t.slot}"]`);
             if(tile && ["ok", "learn"].includes(t.status)) tile.classList.add("ams-ok");
-            else if(tile && ["moved", "mismatch", "missing", "gone"].includes(t.status)) tile.classList.add("ams-warn");
+            else if(tile && ["moved", "mismatch", "missing", "gone", "fix"].includes(t.status)) tile.classList.add("ams-warn");
 
             let liveHtml;
             if(!live) liveHtml = amsSpoolHtml(null, "keine Daten");
