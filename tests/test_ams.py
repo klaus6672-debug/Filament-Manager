@@ -202,3 +202,18 @@ def test_falls_back_to_main_storage_when_lager_d_is_full(client):
     put(client, "H0", "PLA", "#222222")
     put(client, "AMS-3-1", "PLA", "#dcf478")
     assert client.post("/api/ams/apply", json={"slot": "AMS-3-1", "kind": "park"}).json()["parked_to"] == "H1"
+
+
+def test_color_can_be_taken_over_from_live_value(client):
+    # gleiche Sorte, Farbe weicht leicht ab (ΔE ≈ 17): "Farbe übernehmen" wird angeboten und setzt den Hex-Wert aus dem AMS
+    put(client, "AMS-1-1", "PLA Basic", "#6f8f9f")
+    t = tray(client, "AMS-1-1")
+    assert t["status"] == "mismatch" and t["can_fixcolor"] is True
+    assert client.post("/api/ams/apply", json={"slot": "AMS-1-1", "kind": "fixcolor"}).status_code == 200
+    assert client.get("/api/slots").json()["slots"]["AMS-1-1"]["color"] == "#5b6579"
+    assert tray(client, "AMS-1-1")["status"] in ("ok", "learn")
+    # andere Sorte oder völlig andere Farbe: kein Angebot (es ist vermutlich eine andere Spule)
+    put(client, "AMS-1-2", "PLA Matte", "#5e43b7")
+    assert tray(client, "AMS-1-2")["can_fixcolor"] is False
+    put(client, "AMS-1-2", "PLA Basic", "#ff0000")
+    assert tray(client, "AMS-1-2")["can_fixcolor"] is False

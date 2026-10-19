@@ -332,6 +332,10 @@ def build_ams(states, conn):
                     entry["status"] = "ok"
                 continue
             entry["status"] = "mismatch" if spool else "missing"
+            entry["can_fixcolor"] = bool(
+                spool and same_material(spool["material"], live)
+                and color_distance(spool["color"], live["color"]) <= COLOR_CAND
+            )
             cands = []
             for s in outside:
                 if s.get("tag_uid") or not same_material(s["material"], live):
@@ -485,7 +489,7 @@ def summary(low: int = 100):
 
 class AmsApplyIn(BaseModel):
     slot: str = Field(pattern=r"^AMS-[1-3]-[1-4]$")
-    kind: str = Field(pattern=r"^(learn|move|create|fixmat|park)$")
+    kind: str = Field(pattern=r"^(learn|move|create|fixmat|park|fixcolor)$")
     from_slot: str | None = Field(default=None, pattern=r"^[A-Za-z0-9_-]{1,32}$")
     park_old: bool = False  # nur bei "create": die bisherige Spule im AMS-Slot zuerst ins Hauptlager legen
 
@@ -558,6 +562,11 @@ def ams_apply(item: AmsApplyIn):
                 if not target:
                     return JSONResponse({"error": "Der Slot ist leer."}, status_code=400)
                 conn.execute("UPDATE filaments SET material=? WHERE slot=?", (describe_live(live)["material"], item.slot))
+
+            elif item.kind == "fixcolor":
+                if not target or not live["color"]:
+                    return JSONResponse({"error": "Nichts zu übernehmen."}, status_code=400)
+                conn.execute("UPDATE filaments SET color=? WHERE slot=?", (live["color"], item.slot))
 
             elif item.kind == "move":
                 src_slot = item.from_slot
