@@ -1,8 +1,8 @@
 name: Filament Manager
-version: "1.0.0"
+version: "1.0.1"
 slug: filament_manager
 description: Filamentlager mit Regal-Ansicht, QR-Labels, Barcode-Scan und Statistik
-url: https://github.com/klaus6672-debug/Filament-Manager
+url: https://github.com/Klaus6672/filament-manager
 arch:
   - amd64
   - aarch64
