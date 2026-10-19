@@ -134,3 +134,26 @@ def test_home_assistant_unreachable(client, monkeypatch):
     monkeypatch.setattr(server, "fetch_ha_states", boom)
     assert client.get("/api/ams").json() == {"available": False, "reason": "weg", "units": []}
     assert client.post("/api/ams/apply", json={"slot": "AMS-1-1", "kind": "learn"}).status_code == 503
+
+
+def test_similar_but_different_spools_are_not_reported_as_matching(client):
+    # Werte aus der echten Anlage: Farbe/Sorte weichen sichtbar ab, früher stand hier "passt"
+    put(client, "AMS-1-4", "PLA Basic", "#d2bc8a", color_name="Beige")           # live ist Matte-Schwarz: Farbe und Sorte weichen ab
+    assert tray(client, "AMS-1-4")["status"] == "mismatch"
+    put(client, "AMS-3-2", "PLA Basic", "#f6f7f1", color_name="Jade White")      # gleiche Farbe wie live (#FFFFFF), aber Basic statt Matte
+    assert tray(client, "AMS-3-2")["status"] == "mismatch"
+    put(client, "AMS-3-2", "PLA Matte", "#f6f7f1", color_name="Jade White")      # gleiche Sorte -> passt
+    assert tray(client, "AMS-3-2")["status"] in ("ok", "learn")
+    put(client, "AMS-3-2", "PLA", "#f6f7f1")                                     # keine Sorte angegeben -> wird nicht bemängelt
+    assert tray(client, "AMS-3-2")["status"] in ("ok", "learn")
+
+
+def test_color_distance_is_perceptual():
+    sys.path.insert(0, str(APP_DIR))
+    server = importlib.import_module("server")
+    d = server.color_distance
+    assert d("#8f908a", "#c8a27d") > 20      # grau vs. Latte Brown
+    assert d("#0b2989", "#0057b8") > 15      # Marineblau vs. Blau
+    assert d("#d3b8a7", "#d2bc8a") > 15      # Rosabeige vs. Gelbbeige
+    assert d("#ffffff", "#f6f7f1") < 10      # praktisch gleiches Weiß
+    assert d("#c12d1f", "#c12e1f") < 1

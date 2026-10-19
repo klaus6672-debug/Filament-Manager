@@ -133,8 +133,8 @@ SLOT_NAME = re.compile(r"^(.*\S)\s+Slot\s+(\d+)$")
 AMS_SLOT_RE = re.compile(r"^AMS-(\d+)-(\d+)$")
 AMS_UNITS = (1, 2, 3)
 VARIANTS = {"basic", "matte", "silk", "hf", "tough", "cf", "gf", "plus", "+", "lite", "metal", "sparkle", "marble", "galaxy"}
-COLOR_OK = 70      # RGB-Abstand, bis zu dem Farben als "gleich" gelten (0..441)
-COLOR_CAND = 120   # RGB-Abstand, bis zu dem eine Spule als Kandidat vorgeschlagen wird
+COLOR_OK = 10      # Farbabstand (CIE-Lab ΔE), bis zu dem Farben als "gleich" gelten (Grau ↔ Braun ≈ 26, Blau ↔ Marine ≈ 21)
+COLOR_CAND = 30    # Farbabstand, bis zu dem eine Spule als Kandidat vorgeschlagen wird
 
 
 class AmsUnavailable(Exception):
@@ -171,12 +171,22 @@ def norm_hex(value):
     return "#" + m.group(1).lower() if m else None
 
 
+def _lab(hex_color):
+    r, g, b = (int(hex_color[i:i + 2], 16) / 255 for i in (1, 3, 5))
+    r, g, b = ((v / 12.92 if v <= 0.04045 else ((v + 0.055) / 1.055) ** 2.4) for v in (r, g, b))
+    x = (0.4124 * r + 0.3576 * g + 0.1805 * b) / 0.95047
+    y = 0.2126 * r + 0.7152 * g + 0.0722 * b
+    z = (0.0193 * r + 0.1192 * g + 0.9505 * b) / 1.08883
+    f = lambda t: t ** (1 / 3) if t > 0.008856 else 7.787 * t + 16 / 116
+    return 116 * f(y) - 16, 500 * (f(x) - f(y)), 200 * (f(y) - f(z))
+
+
 def color_distance(a, b):
+    """Wahrgenommener Farbabstand (CIE-Lab ΔE76). 0 = gleich, ~2 kaum sichtbar, >20 deutlich andere Farbe."""
     a, b = norm_hex(a), norm_hex(b)
     if not a or not b:
         return 999.0
-    ra, rb = (int(a[i:i + 2], 16) for i in (1, 3, 5)), (int(b[i:i + 2], 16) for i in (1, 3, 5))
-    return sum((x - y) ** 2 for x, y in zip(ra, rb)) ** 0.5
+    return sum((x - y) ** 2 for x, y in zip(_lab(a), _lab(b))) ** 0.5
 
 
 def base_type(material):
@@ -246,10 +256,22 @@ def describe_live(tray):
     }
 
 
+def variants_of(text):
+    return {t.lower() for t in (text or "").replace("+", " + ").split() if t.lower() in VARIANTS}
+
+
+def same_material(material, tray):
+    """Gleicher Grundtyp (PLA, PETG …) und – wenn beide eine Sorte nennen – gleiche Sorte (Basic ≠ Matte)."""
+    if base_type(material) != tray["type"].upper():
+        return False
+    mine, live = variants_of(material), variants_of(tray["name"])
+    return not mine or not live or bool(mine & live)
+
+
 def compatible(spool, tray):
     return (
         bool(spool)
-        and base_type(spool["material"]) == tray["type"].upper()
+        and same_material(spool["material"], tray)
         and color_distance(spool["color"], tray["color"]) <= COLOR_OK
     )
 
@@ -306,7 +328,7 @@ def build_ams(states, conn):
             entry["status"] = "mismatch" if spool else "missing"
             cands = []
             for s in outside:
-                if s.get("tag_uid") or base_type(s["material"]) != live["type"].upper():
+                if s.get("tag_uid") or not same_material(s["material"], live):
                     continue
                 d = color_distance(s["color"], live["color"])
                 if d <= COLOR_CAND:
