@@ -217,3 +217,26 @@ def test_color_can_be_taken_over_from_live_value(client):
     assert tray(client, "AMS-1-2")["can_fixcolor"] is False
     put(client, "AMS-1-2", "PLA Basic", "#ff0000")
     assert tray(client, "AMS-1-2")["can_fixcolor"] is False
+
+
+def test_color_names_are_generated_from_the_hex_code(client, monkeypatch):
+    server = sys.modules["server"]
+    assert tray(client, "AMS-1-1")["live"]["label"] == "Bambu · PLA Basic · Blue Gray"        # #5B6579
+    assert tray(client, "AMS-1-4")["live"]["label"] == "Bambu · PLA Matte · Charcoal"          # Matte-Tabelle, #000000
+    assert tray(client, "AMS-3-2")["live"]["label"] == "Bambu · PLA Matte · Ivory White"       # Matte #FFFFFF, nicht "Jade White"
+    assert tray(client, "AMS-2-1")["live"]["label"] == "Bambu · PLA Basic · Yellow"
+    third = tray(client, "AMS-1-3")["live"]
+    assert third["label"] == "Kexcelled · PLA · SalbeiGrün" and third["name_known"] is True      # Fremdhersteller: Name aus dem Spulentext
+    # Code nicht in der Tabelle -> Name unbekannt (manuelle Anlage); Create trägt dann keinen Namen ein
+    unknown = STATES + [sensor("sensor.x", "P1S-AMS links 2", 2, "Bambu PLA Basic", "PLA", "#123456", "AABBCCDD00000100")]
+    monkeypatch.setattr(server, "fetch_ha_states", lambda: unknown)
+    t = tray(client, "AMS-2-2")["live"]
+    assert t["name_known"] is False and t["label"] == "Bambu · PLA Basic" and t["color"] == "#123456"
+
+
+def test_park_can_clear_a_slot_that_still_holds_a_spool_in_the_printer(client):
+    put(client, "AMS-1-1", "PLA Basic", "#ff0000", color_name="alt")
+    assert client.post("/api/ams/apply", json={"slot": "AMS-1-1", "kind": "park"}).status_code == 409   # steckt laut AMS etwas
+    r = client.post("/api/ams/apply", json={"slot": "AMS-1-1", "kind": "park", "park_old": True})
+    assert r.status_code == 200 and r.json()["parked_to"] == "D0"
+    assert "AMS-1-1" not in client.get("/api/slots").json()["slots"]

@@ -136,6 +136,28 @@ VARIANTS = {"basic", "matte", "silk", "hf", "tough", "cf", "gf", "plus", "+", "l
 COLOR_OK = 10      # Farbabstand (CIE-Lab ΔE), bis zu dem Farben als "gleich" gelten (Grau ↔ Braun ≈ 26, Blau ↔ Marine ≈ 21)
 COLOR_CAND = 30    # Farbabstand, bis zu dem eine Spule als Kandidat vorgeschlagen wird
 
+# Offizielle Bambu-Lab-Farbtabellen (Hex-Code-Tabellen von bambulab.com, "Grey" wie in der App als "Gray" geschrieben).
+# Der Drucker liefert den exakten Hex-Code der Spule; daraus wird der Farbname erzeugt. Unbekannter Code -> manuelle Anlage.
+BAMBU_COLORS = {
+    "basic": {
+        "#FFFFFF": "Jade White", "#EC008C": "Magenta", "#E4BD68": "Gold", "#3F8E43": "Mistletoe Green", "#C12E1F": "Red",
+        "#5E43B7": "Purple", "#F7E6DE": "Beige", "#F55A74": "Pink", "#FEC600": "Sunflower Yellow", "#847D48": "Bronze",
+        "#00B1B7": "Turquoise", "#482960": "Indigo Purple", "#D1D3D5": "Light Gray", "#F5547C": "Hot Pink",
+        "#F4EE2A": "Yellow", "#6F5034": "Cocoa Brown", "#0086D6": "Cyan", "#5B6579": "Blue Gray", "#A6A9AA": "Silver",
+        "#FF6A13": "Orange", "#BECF00": "Bright Green", "#9D432C": "Brown", "#0A2989": "Blue", "#545454": "Dark Gray",
+        "#8E9089": "Gray", "#FF9016": "Pumpkin Orange", "#00AE42": "Bambu Green", "#9D2235": "Maroon Red",
+        "#0056B8": "Cobalt Blue", "#000000": "Black",
+    },
+    "matte": {
+        "#FFFFFF": "Ivory White", "#CBC6B8": "Bone White", "#E8DBB7": "Desert Tan", "#D3B7A7": "Latte Brown",
+        "#AE835B": "Caramel", "#B15533": "Terracotta", "#7D6556": "Dark Brown", "#4D3324": "Dark Chocolate",
+        "#AE96D4": "Lilac Purple", "#E8AFCF": "Sakura Pink", "#F99963": "Mandarin Orange", "#F7D959": "Lemon Yellow",
+        "#950051": "Plum", "#DE4343": "Scarlet Red", "#BB3D43": "Dark Red", "#68724D": "Dark Green",
+        "#61C680": "Grass Green", "#C2E189": "Apple Green", "#A3D8E1": "Ice Blue", "#56B7E6": "Sky Blue",
+        "#0078BF": "Marine Blue", "#042F56": "Dark Blue", "#9B9EA0": "Ash Gray", "#757575": "Nardo Gray", "#000000": "Charcoal",
+    },
+}
+
 
 class AmsUnavailable(Exception):
     pass
@@ -241,18 +263,24 @@ def ams_mapping(conn, names):
 
 
 def describe_live(tray):
-    """Aus einem Live-Fach Hersteller/Material/Farbname für einen neuen Eintrag ableiten."""
+    """Aus einem Live-Fach Hersteller, Material und Farbname ableiten. `known` = Farbname sicher bekannt."""
     tokens = tray["name"].split()
     typ = tray["type"].upper()
     idx = next((i for i, t in enumerate(tokens) if t.upper() == typ), None)
     if idx is None:
-        return {"manufacturer": "", "material": tray["type"] or "PLA", "color_name": ""}
+        return {"manufacturer": "", "material": tray["type"] or "PLA", "color_name": "", "known": False}
+    manufacturer = " ".join(tokens[:idx])
     variants = [t for t in tokens[idx + 1:] if t.lower() in VARIANTS]
     rest = [t for t in tokens[idx + 1:] if t.lower() not in VARIANTS]
+    color_name = " ".join(rest)  # Fremdhersteller nennen die Farbe im Namen (z. B. "SalbeiGrün")
+    if not color_name and manufacturer.lower() == "bambu" and tray.get("color"):
+        table = BAMBU_COLORS.get(variants[0].lower() if variants else "", {})
+        color_name = table.get(tray["color"].upper(), "")
     return {
-        "manufacturer": " ".join(tokens[:idx]),
+        "manufacturer": manufacturer,
         "material": " ".join([tray["type"], *variants]),
-        "color_name": " ".join(rest),
+        "color_name": color_name,
+        "known": bool(color_name),
     }
 
 
@@ -292,6 +320,11 @@ def build_ams(states, conn):
             slot = f"AMS-{unit}-{pos}"
             live = units.get(ha_name, {}).get(pos) if ha_name else None
             spool = spools.get(slot)
+            if live and not live["empty"]:
+                info = describe_live(live)
+                live["manufacturer"], live["material"] = info["manufacturer"], info["material"]
+                live["color_name"], live["name_known"] = info["color_name"], info["known"]
+                live["label"] = " · ".join(x for x in (info["manufacturer"], info["material"], info["color_name"]) if x)
             entry = {
                 "slot": slot,
                 "pos": pos,
@@ -491,7 +524,7 @@ class AmsApplyIn(BaseModel):
     slot: str = Field(pattern=r"^AMS-[1-3]-[1-4]$")
     kind: str = Field(pattern=r"^(learn|move|create|fixmat|park|fixcolor)$")
     from_slot: str | None = Field(default=None, pattern=r"^[A-Za-z0-9_-]{1,32}$")
-    park_old: bool = False  # nur bei "create": die bisherige Spule im AMS-Slot zuerst ins Hauptlager legen
+    park_old: bool = False  # bei "create"/"park": die bisherige Spule im AMS-Slot ins Lager D legen, auch wenn im Fach etwas steckt
 
 
 class AmsMapIn(BaseModel):
@@ -541,7 +574,7 @@ def ams_apply(item: AmsApplyIn):
             if item.kind == "park":  # Fach ist leer, die App führt noch eine Spule: ins Hauptlager räumen
                 if not target:
                     return JSONResponse({"error": "Der Slot ist bereits leer."}, status_code=409)
-                if live and not live["empty"]:
+                if live and not live["empty"] and not item.park_old:
                     return JSONResponse({"error": "Im Fach steckt laut AMS eine Spule."}, status_code=409)
                 parked_to = _free_storage_slot(conn)
                 if not parked_to:

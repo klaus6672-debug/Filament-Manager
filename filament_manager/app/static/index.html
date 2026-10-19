@@ -670,7 +670,6 @@ letter-spacing:1px;
 .ams-act{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
 .ams-act select{max-width:100%}
 .ams-msg{color:var(--muted);font-size:13px;padding:6px 0}
-.ams-live-bar{position:absolute;left:12px;right:12px;bottom:-6px;height:11px;border-radius:7px;border:2px solid #1b2635;box-shadow:0 1px 4px rgba(0,0,0,.4);pointer-events:none}
 .slot.ams-ok{box-shadow:0 0 0 2px #2ecc71 inset}
 .slot.ams-warn{box-shadow:0 0 0 2px #ffb341 inset}
 @media (max-width:760px){.ams-row{grid-template-columns:1fr 1fr}.ams-row .ams-act{grid-column:1 / -1}}
@@ -2467,7 +2466,6 @@ function renderAms(data){
     let open = 0;
     let html = "";
     document.querySelectorAll(".slot.ams-ok, .slot.ams-warn").forEach(el => el.classList.remove("ams-ok", "ams-warn"));
-    document.querySelectorAll(".ams-live-bar").forEach(el => el.remove());
 
     data.units.forEach(unit => {
         const opts = (data.ha_units || []).map(n =>
@@ -2482,19 +2480,14 @@ function renderAms(data){
             if(tile && ["ok", "learn"].includes(t.status)) tile.classList.add("ams-ok");
             else if(tile && ["moved", "mismatch", "missing", "gone", "fix"].includes(t.status)) tile.classList.add("ams-warn");
 
-            // Livefarbe aus dem AMS als Streifen unter der Kachel
-            if(tile && live && !live.empty && live.color){
-                const bar = document.createElement("div");
-                bar.className = "ams-live-bar";
-                bar.style.background = live.color;
-                bar.title = "Live aus dem AMS: " + (live.name || live.type) + " " + live.color.toUpperCase();
-                tile.appendChild(bar);
-            }
-
             let liveHtml;
             if(!live) liveHtml = amsSpoolHtml(null, "keine Daten");
             else if(live.empty) liveHtml = amsSpoolHtml(null, "leer");
-            else liveHtml = `<span class="ams-swatch" style="background:${amsEsc(live.color)}"></span><span class="txt">${amsEsc(live.name || live.type)} <span class="pos">${amsEsc((live.color || "").toUpperCase())}${live.tag_uid ? "" : " · ohne RFID"}</span></span>`;
+            else{
+                const hex = amsEsc((live.color || "").toUpperCase());
+                const extra = (live.name_known ? "" : `${hex} · Farbname fehlt`) + (live.tag_uid ? "" : `${live.name_known ? "" : " · "}ohne RFID`);
+                liveHtml = `<span class="ams-swatch" style="background:${amsEsc(live.color)}"></span><span class="txt">${amsEsc(live.label || live.name || live.type)}${extra ? ` <span class="pos">${extra}</span>` : ""}</span>`;
+            }
 
             let act = "";
             if(t.action){
@@ -2507,13 +2500,17 @@ function renderAms(data){
                         <button type="button" onclick="applyAms('${t.slot}','move',document.getElementById('cand-${t.slot}').value)">${t.app ? "Tauschen" : "Hierher"}</button>`;
             }
             if(t.status === "missing"){
-                act += `<button type="button" onclick="applyAms('${t.slot}','create','')">Neu anlegen</button>`;
+                act += live.name_known
+                    ? `<button type="button" onclick="applyAms('${t.slot}','create','')">Neu anlegen</button>`
+                    : `<button type="button" onclick="manualCreate('${t.slot}', false)" title="Der Farbname ist noch nicht bekannt: Das Formular wird vorausgefüllt">Manuell anlegen</button>`;
             }
             if(t.can_fixcolor){
                 act += `<button type="button" onclick="applyAms('${t.slot}','fixcolor','')" title="Farbe der App-Spule durch die Farbe aus dem AMS ersetzen">Farbe übernehmen</button>`;
             }
             if(t.status === "mismatch"){
-                act += `<button type="button" onclick="applyAms('${t.slot}','create','',true)" title="Die bisherige Spule dieses Fachs kommt automatisch ins Lager D (angefangene Spulen)">Neu anlegen, alte → Lager D</button>`;
+                act += live.name_known
+                    ? `<button type="button" onclick="applyAms('${t.slot}','create','',true)" title="Die bisherige Spule dieses Fachs kommt automatisch ins Lager D (angefangene Spulen)">Neu anlegen, alte → Lager D</button>`
+                    : `<button type="button" onclick="manualCreate('${t.slot}', true)" title="Alte Spule kommt ins Lager D, das Formular wird für die neue vorausgefüllt">Manuell anlegen, alte → Lager D</button>`;
             }
 
             html += `<div class="ams-row">
@@ -2551,6 +2548,32 @@ async function applyAms(slot, kind, fromSlot, parkOld){
     if(data.parked_to) alert("Die bisherige Spule liegt jetzt im Lager: " + data.parked_to);
     window.location.reload();
     return true;
+}
+
+/* Farbname unbekannt: Formular mit den Daten aus dem AMS vorausfüllen, den Farbnamen trägt man selbst ein */
+function prefillManual(p){
+    const tile = document.querySelector(`.slot[data-slot="${p.slot}"]`);
+    if(tile) setSlot(p.slot, tile);
+    applyFilamentData({manufacturer: p.manufacturer, material: p.material, color_hex: p.color_hex});
+    document.getElementById("color_name").value = "";
+    document.getElementById("gross_weight").value = "";
+    const status = document.getElementById("scanStatus");
+    if(status) status.textContent = "Aus dem AMS übernommen (" + p.slot + "). Bitte Farbname eintragen, Spule wiegen und speichern.";
+    window.scrollTo({top: 0, behavior: "smooth"});
+    setTimeout(() => document.getElementById("color_name").focus(), 400);
+}
+
+async function manualCreate(slot, parkFirst){
+    const tray = amsData && amsData.units.flatMap(u => u.trays).find(t => t.slot === slot);
+    if(!tray || !tray.live) return;
+    const p = {slot, manufacturer: tray.live.manufacturer, material: tray.live.material, color_hex: tray.live.color};
+    if(!parkFirst){ prefillManual(p); return; }
+    if(!confirm("Die bisherige Spule von " + slot + " wird automatisch ins Lager D (angefangene Spulen) gelegt. Danach legst du die neue Spule von Hand an. Fortfahren?")) return;
+    const {ok, data} = await apiSend("POST", "api/ams/apply", {slot, kind: "park", park_old: true});
+    if(!ok){ alert(data.error || "Auslagern fehlgeschlagen."); return; }
+    if(data.parked_to) alert("Die bisherige Spule liegt jetzt im Lager: " + data.parked_to);
+    try{ sessionStorage.setItem("fm_prefill", JSON.stringify(p)); }catch(e){}
+    window.location.reload();
 }
 
 async function applyAllAms(){
@@ -2598,6 +2621,10 @@ updateNetFilamentWeight();
 
 renderStatsPage();
 suggestColorName();
+try{
+    const pending = sessionStorage.getItem("fm_prefill");
+    if(pending){ sessionStorage.removeItem("fm_prefill"); prefillManual(JSON.parse(pending)); }
+}catch(e){}
 loadAms();
 setInterval(() => {
     const box = document.getElementById("amsLive");
