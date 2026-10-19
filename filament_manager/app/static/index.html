@@ -2490,6 +2490,7 @@ function renderAms(data){
             }
 
             let act = "";
+            if(t.name_fix) open++;
             if(t.action){
                 if(t.action.bulk !== false) open++;
                 act += `<button type="button" onclick="applyAms('${t.slot}','${t.action.kind}','${amsEsc(t.action.from_slot || "")}')">${amsEsc(t.action.label)}</button>`;
@@ -2503,6 +2504,9 @@ function renderAms(data){
                 act += live.name_known
                     ? `<button type="button" onclick="applyAms('${t.slot}','create','')">Neu anlegen</button>`
                     : `<button type="button" onclick="manualCreate('${t.slot}', false)" title="Der Farbname ist noch nicht bekannt: Das Formular wird vorausgefüllt">Manuell anlegen</button>`;
+            }
+            if(t.name_fix){
+                act += `<button type="button" onclick="applyAms('${t.slot}','fixname','')" title="Farbname der App-Spule auf die offizielle Bezeichnung ändern">Name → ${amsEsc(t.name_fix)}</button>`;
             }
             if(t.can_fixcolor){
                 act += `<button type="button" onclick="applyAms('${t.slot}','fixcolor','')" title="Farbe der App-Spule durch die Farbe aus dem AMS ersetzen">Farbe übernehmen</button>`;
@@ -2580,6 +2584,7 @@ async function applyAllAms(){
     if(!amsData) return;
     const jobs = [];
     amsData.units.forEach(u => u.trays.forEach(t => {
+        if(t.name_fix) jobs.push({slot: t.slot, kind: "fixname", from_slot: "", label: t.slot + ": Name → " + t.name_fix});
         if(t.action && t.action.bulk !== false) jobs.push({slot: t.slot, kind: t.action.kind, from_slot: t.action.from_slot || "", label: t.slot + ": " + t.action.label});
     }));
     if(!jobs.length) return;

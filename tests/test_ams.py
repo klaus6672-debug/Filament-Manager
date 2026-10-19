@@ -240,3 +240,34 @@ def test_park_can_clear_a_slot_that_still_holds_a_spool_in_the_printer(client):
     r = client.post("/api/ams/apply", json={"slot": "AMS-1-1", "kind": "park", "park_old": True})
     assert r.status_code == 200 and r.json()["parked_to"] == "D0"
     assert "AMS-1-1" not in client.get("/api/slots").json()["slots"]
+
+
+def test_bambu_names_follow_the_official_table_and_wrong_names_can_be_corrected(client):
+    # Matte-Weiß ist offiziell "Ivory White", Matte-Schwarz "Charcoal" - auch wenn die App bisher "Jade White"/"Black" führt
+    put(client, "AMS-3-2", "PLA Matte", "#f6f7f1", color_name="Jade White")
+    put(client, "AMS-1-4", "PLA Matte", "#000000", color_name="Black")
+    assert tray(client, "AMS-3-2")["live"]["label"] == "Bambu · PLA Matte · Ivory White"
+    assert tray(client, "AMS-1-4")["live"]["label"] == "Bambu · PLA Matte · Charcoal"
+    t = tray(client, "AMS-3-2")
+    assert t["status"] in ("ok", "learn") and t["name_fix"] == "Ivory White"
+    assert client.post("/api/ams/apply", json={"slot": "AMS-3-2", "kind": "fixname"}).status_code == 200
+    s = client.get("/api/slots").json()["slots"]
+    assert s["AMS-3-2"]["color_name"] == "Ivory White"
+    assert "name_fix" not in tray(client, "AMS-3-2")
+    # Name schon richtig (Groß-/Kleinschreibung egal): kein Hinweis
+    put(client, "AMS-1-4", "PLA Matte", "#000000", color_name="charcoal")
+    assert "name_fix" not in tray(client, "AMS-1-4")
+    # Fremdhersteller werden nie umbenannt
+    put(client, "AMS-1-3", "PLA", "#fff144", manufacturer="Kexcelled", color_name="Salbei")
+    assert "name_fix" not in tray(client, "AMS-1-3")
+    assert client.post("/api/ams/apply", json={"slot": "AMS-1-3", "kind": "fixname"}).status_code == 400
+
+
+def test_own_names_are_used_when_the_official_table_has_no_entry(client, monkeypatch):
+    server = sys.modules["server"]
+    monkeypatch.setattr(server, "fetch_ha_states", lambda: STATES + [sensor("sensor.x", "P1S-AMS links 2", 2, "Bambu PLA Basic", "PLA", "#123456", "AABBCCDD00000100")])
+    assert tray(client, "AMS-2-2")["live"]["name_known"] is False
+    put(client, "A1", "PLA Basic", "#123456", color_name="Mein Marine")
+    assert tray(client, "AMS-2-2")["live"]["label"] == "Bambu · PLA Basic · Mein Marine"
+    client.post("/api/ams/apply", json={"slot": "AMS-3-2", "kind": "create"})
+    assert client.get("/api/slots").json()["slots"]["AMS-3-2"]["color_name"] == "Ivory White"

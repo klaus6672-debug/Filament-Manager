@@ -135,9 +135,11 @@ AMS_UNITS = (1, 2, 3)
 VARIANTS = {"basic", "matte", "silk", "hf", "tough", "cf", "gf", "plus", "+", "lite", "metal", "sparkle", "marble", "galaxy"}
 COLOR_OK = 10      # Farbabstand (CIE-Lab ΔE), bis zu dem Farben als "gleich" gelten (Grau ↔ Braun ≈ 26, Blau ↔ Marine ≈ 21)
 COLOR_CAND = 30    # Farbabstand, bis zu dem eine Spule als Kandidat vorgeschlagen wird
+COLOR_NAME_SAME = 5  # Farbabstand, bis zu dem ein vorhandener Spulenname für die Live-Farbe übernommen wird
 
 # Offizielle Bambu-Lab-Farbtabellen (Hex-Code-Tabellen von bambulab.com, "Grey" wie in der App als "Gray" geschrieben).
-# Der Drucker liefert den exakten Hex-Code der Spule; daraus wird der Farbname erzeugt. Unbekannter Code -> manuelle Anlage.
+# Der Drucker liefert den exakten Hex-Code der Spule; daraus wird der Farbname erzeugt. Bei Bambu gilt diese Tabelle zuerst,
+# sonst (und bei Farben, die hier fehlen) die Namen, die du in deinem Bestand schon verwendest. Unbekannter Code -> manuelle Anlage.
 BAMBU_COLORS = {
     "basic": {
         "#FFFFFF": "Jade White", "#EC008C": "Magenta", "#E4BD68": "Gold", "#3F8E43": "Mistletoe Green", "#C12E1F": "Red",
@@ -146,7 +148,7 @@ BAMBU_COLORS = {
         "#F4EE2A": "Yellow", "#6F5034": "Cocoa Brown", "#0086D6": "Cyan", "#5B6579": "Blue Gray", "#A6A9AA": "Silver",
         "#FF6A13": "Orange", "#BECF00": "Bright Green", "#9D432C": "Brown", "#0A2989": "Blue", "#545454": "Dark Gray",
         "#8E9089": "Gray", "#FF9016": "Pumpkin Orange", "#00AE42": "Bambu Green", "#9D2235": "Maroon Red",
-        "#0056B8": "Cobalt Blue", "#000000": "Black",
+        "#0056B8": "Cobalt Blue", "#000000": "Black", "#F2FEDE": "Ivory White",
     },
     "matte": {
         "#FFFFFF": "Ivory White", "#CBC6B8": "Bone White", "#E8DBB7": "Desert Tan", "#D3B7A7": "Latte Brown",
@@ -154,7 +156,7 @@ BAMBU_COLORS = {
         "#AE96D4": "Lilac Purple", "#E8AFCF": "Sakura Pink", "#F99963": "Mandarin Orange", "#F7D959": "Lemon Yellow",
         "#950051": "Plum", "#DE4343": "Scarlet Red", "#BB3D43": "Dark Red", "#68724D": "Dark Green",
         "#61C680": "Grass Green", "#C2E189": "Apple Green", "#A3D8E1": "Ice Blue", "#56B7E6": "Sky Blue",
-        "#0078BF": "Marine Blue", "#042F56": "Dark Blue", "#9B9EA0": "Ash Gray", "#757575": "Nardo Gray", "#000000": "Charcoal",
+        "#0078BF": "Marine Blue", "#042F56": "Dark Blue", "#9B9EA0": "Ash Gray", "#757575": "Nardo Gray", "#000000": "Charcoal", "#F2FEDE": "Ivory White",
     },
 }
 
@@ -262,7 +264,23 @@ def ams_mapping(conn, names):
     return mapping
 
 
-def describe_live(tray):
+def learned_color_name(spools, manufacturer, material, color):
+    """Farbname, den du für dieselbe Farbe bei gleichem Hersteller und gleicher Sorte schon verwendest (häufigster Treffer)."""
+    best = {}
+    for s in spools or []:
+        name = (s.get("color_name") or "").strip()
+        if not name or (s.get("manufacturer") or "").strip().lower() != manufacturer.lower():
+            continue
+        if base_type(s["material"]) != base_type(material) or variants_of(s["material"]) != variants_of(material):
+            continue
+        d = color_distance(s["color"], color)
+        if d <= COLOR_NAME_SAME:
+            count, dist = best.get(name, (0, 99))
+            best[name] = (count + 1, min(dist, d))
+    return min(best, key=lambda n: (best[n][1] > 1, -best[n][0], best[n][1])) if best else ""
+
+
+def describe_live(tray, spools=None):
     """Aus einem Live-Fach Hersteller, Material und Farbname ableiten. `known` = Farbname sicher bekannt."""
     tokens = tray["name"].split()
     typ = tray["type"].upper()
@@ -272,16 +290,14 @@ def describe_live(tray):
     manufacturer = " ".join(tokens[:idx])
     variants = [t for t in tokens[idx + 1:] if t.lower() in VARIANTS]
     rest = [t for t in tokens[idx + 1:] if t.lower() not in VARIANTS]
+    material = " ".join([tray["type"], *variants])
     color_name = " ".join(rest)  # Fremdhersteller nennen die Farbe im Namen (z. B. "SalbeiGrün")
     if not color_name and manufacturer.lower() == "bambu" and tray.get("color"):
-        table = BAMBU_COLORS.get(variants[0].lower() if variants else "", {})
+        table = BAMBU_COLORS.get(variants[0].lower() if variants else "", {})        # 1. offizielle Bambu-Tabelle
         color_name = table.get(tray["color"].upper(), "")
-    return {
-        "manufacturer": manufacturer,
-        "material": " ".join([tray["type"], *variants]),
-        "color_name": color_name,
-        "known": bool(color_name),
-    }
+    if not color_name and manufacturer and tray.get("color"):
+        color_name = learned_color_name(spools, manufacturer, material, tray["color"])  # 2. dein Bestand
+    return {"manufacturer": manufacturer, "material": material, "color_name": color_name, "known": bool(color_name)}
 
 
 def variants_of(text):
@@ -304,6 +320,14 @@ def compatible(spool, tray):
     )
 
 
+def _flag_name(entry, spool, live):
+    """Bambu-Spule passt, aber der Farbname in der App weicht von der offiziellen Bezeichnung ab -> Korrektur anbieten."""
+    if (live.get("manufacturer") or "").lower() != "bambu" or not live.get("name_known") or not spool:
+        return
+    if (spool.get("color_name") or "").strip().lower() != live["color_name"].lower():
+        entry["name_fix"] = live["color_name"]
+
+
 def build_ams(states, conn):
     units = collect_units(states)
     mapping = ams_mapping(conn, list(units))
@@ -321,7 +345,7 @@ def build_ams(states, conn):
             live = units.get(ha_name, {}).get(pos) if ha_name else None
             spool = spools.get(slot)
             if live and not live["empty"]:
-                info = describe_live(live)
+                info = describe_live(live, list(spools.values()))
                 live["manufacturer"], live["material"] = info["manufacturer"], info["material"]
                 live["color_name"], live["name_known"] = info["color_name"], info["known"]
                 live["label"] = " · ".join(x for x in (info["manufacturer"], info["material"], info["color_name"]) if x)
@@ -349,6 +373,7 @@ def build_ams(states, conn):
             if tag_owner and tag_owner["slot"] == slot:
                 if same_material(tag_owner["material"], live):
                     entry["status"] = "ok"
+                    _flag_name(entry, spool, live)
                 else:  # Es ist dieselbe Spule (Kennung), aber die App führt eine andere Sorte, z. B. Basic statt Matte
                     entry["status"] = "fix"
                     entry["action"] = {"kind": "fixmat", "label": f"Sorte → {describe_live(live)['material']}"}
@@ -363,6 +388,7 @@ def build_ams(states, conn):
                     entry["action"] = {"kind": "learn", "label": "Kennung merken"}
                 else:
                     entry["status"] = "ok"
+                _flag_name(entry, spool, live)
                 continue
             entry["status"] = "mismatch" if spool else "missing"
             entry["can_fixcolor"] = bool(
@@ -522,7 +548,7 @@ def summary(low: int = 100):
 
 class AmsApplyIn(BaseModel):
     slot: str = Field(pattern=r"^AMS-[1-3]-[1-4]$")
-    kind: str = Field(pattern=r"^(learn|move|create|fixmat|park|fixcolor)$")
+    kind: str = Field(pattern=r"^(learn|move|create|fixmat|park|fixcolor|fixname)$")
     from_slot: str | None = Field(default=None, pattern=r"^[A-Za-z0-9_-]{1,32}$")
     park_old: bool = False  # bei "create"/"park": die bisherige Spule im AMS-Slot ins Lager D legen, auch wenn im Fach etwas steckt
 
@@ -596,6 +622,12 @@ def ams_apply(item: AmsApplyIn):
                     return JSONResponse({"error": "Der Slot ist leer."}, status_code=400)
                 conn.execute("UPDATE filaments SET material=? WHERE slot=?", (describe_live(live)["material"], item.slot))
 
+            elif item.kind == "fixname":
+                info = describe_live(live, [dict(r) for r in conn.execute("SELECT * FROM filaments").fetchall()])
+                if not target or not info["known"] or (info["manufacturer"] or "").lower() != "bambu":
+                    return JSONResponse({"error": "Kein Farbname bekannt."}, status_code=400)
+                conn.execute("UPDATE filaments SET color_name=? WHERE slot=?", (info["color_name"], item.slot))
+
             elif item.kind == "fixcolor":
                 if not target or not live["color"]:
                     return JSONResponse({"error": "Nichts zu übernehmen."}, status_code=400)
@@ -625,7 +657,7 @@ def ams_apply(item: AmsApplyIn):
                     if not parked_to:
                         return JSONResponse({"error": "Lager D und Hauptlager sind voll."}, status_code=409)
                     conn.execute("UPDATE filaments SET slot=? WHERE slot=?", (parked_to, item.slot))
-                info = describe_live(live)
+                info = describe_live(live, [dict(r) for r in conn.execute("SELECT * FROM filaments").fetchall()])
                 if live["tag_uid"]:
                     _clear_tag(conn, live["tag_uid"], item.slot)
                 conn.execute(
