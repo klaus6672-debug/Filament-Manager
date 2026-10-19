@@ -374,6 +374,10 @@ def build_ams(states, conn):
                 if same_material(tag_owner["material"], live):
                     entry["status"] = "ok"
                     _flag_name(entry, spool, live)
+                    if live["color"] and color_distance(spool["color"], live["color"]) > COLOR_OK:
+                        # Dieselbe Spule (Kennung), aber der Hex-Code in der App weicht sichtbar vom AMS ab
+                        entry["status"] = "color"
+                        entry["color_fix"] = live["color"]
                 else:  # Es ist dieselbe Spule (Kennung), aber die App führt eine andere Sorte, z. B. Basic statt Matte
                     entry["status"] = "fix"
                     entry["action"] = {"kind": "fixmat", "label": f"Sorte → {describe_live(live)['material']}"}

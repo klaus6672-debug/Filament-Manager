@@ -271,3 +271,18 @@ def test_own_names_are_used_when_the_official_table_has_no_entry(client, monkeyp
     assert tray(client, "AMS-2-2")["live"]["label"] == "Bambu · PLA Basic · Mein Marine"
     client.post("/api/ams/apply", json={"slot": "AMS-3-2", "kind": "create"})
     assert client.get("/api/slots").json()["slots"]["AMS-3-2"]["color_name"] == "Ivory White"
+
+
+def test_known_tag_with_visibly_different_color_offers_color_fix(client):
+    # Spule mit Kennung, Name/Sorte stimmen, aber der Hex-Code in der App ist ein anderer Farbton (wie Yellow = Sunflower-Gelb)
+    client.post("/api/ams/apply", json={"slot": "AMS-2-1", "kind": "create"})
+    put(client, "AMS-2-1", "PLA Basic", "#fec600", color_name="Yellow")          # Kennung bleibt erhalten
+    t = tray(client, "AMS-2-1")
+    assert t["status"] == "color" and t["color_fix"] == "#f4ee2a" and "name_fix" not in t
+    assert client.post("/api/ams/apply", json={"slot": "AMS-2-1", "kind": "fixcolor"}).status_code == 200
+    assert client.get("/api/slots").json()["slots"]["AMS-2-1"]["color"] == "#f4ee2a"
+    t = tray(client, "AMS-2-1")
+    assert t["status"] == "ok" and "color_fix" not in t
+    # kleine Abweichung (ΔE <= 10) wird nicht bemängelt
+    put(client, "AMS-2-1", "PLA Basic", "#f6ee3a", color_name="Yellow")
+    assert tray(client, "AMS-2-1")["status"] == "ok"

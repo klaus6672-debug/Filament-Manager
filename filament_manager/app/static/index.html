@@ -666,7 +666,7 @@ letter-spacing:1px;
 .ams-badge.ok{background:#1f6f43;color:#dfffee}
 .ams-badge.empty{background:#3a4556;color:#cbd5e5}
 .ams-badge.learn{background:#1f5f8f;color:#dff3ff}
-.ams-badge.moved,.ams-badge.missing,.ams-badge.mismatch,.ams-badge.gone,.ams-badge.fix{background:#8a5a12;color:#fff1d6}
+.ams-badge.moved,.ams-badge.missing,.ams-badge.mismatch,.ams-badge.gone,.ams-badge.fix,.ams-badge.color{background:#8a5a12;color:#fff1d6}
 .ams-act{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
 .ams-act select{max-width:100%}
 .ams-msg{color:var(--muted);font-size:13px;padding:6px 0}
@@ -2448,7 +2448,7 @@ function amsEsc(v){
 
 const AMS_STATUS = {
     ok: "✓ passt", empty: "leer", learn: "✓ passt", moved: "steckt jetzt hier",
-    mismatch: "weicht ab", missing: "nicht in der App", gone: "Fach leer", fix: "Sorte weicht ab"
+    mismatch: "weicht ab", missing: "nicht in der App", gone: "Fach leer", fix: "Sorte weicht ab", color: "Farbe weicht ab"
 };
 
 function amsSpoolHtml(item, fallback){
@@ -2478,7 +2478,7 @@ function renderAms(data){
             const live = t.live;
             const tile = document.querySelector(`.slot[data-slot="${t.slot}"]`);
             if(tile && ["ok", "learn"].includes(t.status)) tile.classList.add("ams-ok");
-            else if(tile && ["moved", "mismatch", "missing", "gone", "fix"].includes(t.status)) tile.classList.add("ams-warn");
+            else if(tile && ["moved", "mismatch", "missing", "gone", "fix", "color"].includes(t.status)) tile.classList.add("ams-warn");
 
             let liveHtml;
             if(!live) liveHtml = amsSpoolHtml(null, "keine Daten");
@@ -2507,6 +2507,10 @@ function renderAms(data){
             }
             if(t.name_fix){
                 act += `<button type="button" onclick="applyAms('${t.slot}','fixname','')" title="Farbname der App-Spule auf die offizielle Bezeichnung ändern">Name → ${amsEsc(t.name_fix)}</button>`;
+            }
+            if(t.color_fix){
+                open++;
+                act += `<button type="button" onclick="applyAms('${t.slot}','fixcolor','')" title="Hex-Code der App-Spule auf den Wert aus dem AMS setzen">Farbe → ${amsEsc(t.color_fix.toUpperCase())}</button>`;
             }
             if(t.can_fixcolor){
                 act += `<button type="button" onclick="applyAms('${t.slot}','fixcolor','')" title="Farbe der App-Spule durch die Farbe aus dem AMS ersetzen">Farbe übernehmen</button>`;
@@ -2584,6 +2588,7 @@ async function applyAllAms(){
     if(!amsData) return;
     const jobs = [];
     amsData.units.forEach(u => u.trays.forEach(t => {
+        if(t.color_fix) jobs.push({slot: t.slot, kind: "fixcolor", from_slot: "", label: t.slot + ": Farbe → " + t.color_fix.toUpperCase()});
         if(t.name_fix) jobs.push({slot: t.slot, kind: "fixname", from_slot: "", label: t.slot + ": Name → " + t.name_fix});
         if(t.action && t.action.bulk !== false) jobs.push({slot: t.slot, kind: t.action.kind, from_slot: t.action.from_slot || "", label: t.slot + ": " + t.action.label});
     }));
