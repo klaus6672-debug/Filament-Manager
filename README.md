@@ -1,8 +1,12 @@
 # Filament Manager
 
-Filamentlager mit Regal-Ansicht (Regal A/B/C, Lager D für angefangene Spulen, 3× AMS, Hauptlager), QR-Labels als PDF, Barcode-/QR-Scan mit der Kamera,
+Filamentlager mit Regal-Ansicht (bis zu vier frei einstellbare Lager A–D mit 6, 12 oder 18 Fächern, bis zu 3× AMS, Hauptlager mit 120 Plätzen), QR-Labels als PDF, Barcode-/QR-Scan mit der Kamera,
 Statistik und CSV-Import/-Export. Läuft als **installierbare App auf Handy und PC** (PWA), als **Docker-Container** und
 als **Home-Assistant-Add-on**. Die Daten liegen in einer SQLite-Datei (`filament.db`) auf deinem eigenen Rechner.
+
+**Aufbau anpassen:** Unter „⚙ Lager einrichten" lassen sich die Lager A–D einzeln ein- und ausblenden, auf 6, 12 oder 18 Fächer
+stellen und umbenennen (z. B. „Regal links", „Schrank", „Angefangene Spulen"). Dazu die Anzahl der angezeigten AMS (0 bis 3).
+Belegte Fächer werden nie versteckt: Die App verweigert das Ausblenden oder Verkleinern, solange dort Spulen liegen.
 
 ```
 filament-manager/

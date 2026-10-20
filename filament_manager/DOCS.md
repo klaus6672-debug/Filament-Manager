@@ -2,6 +2,12 @@
 
 Filamentlager mit Regal-Ansicht, QR-Labels, Barcode-Scan und Statistik.
 
+## Lager einrichten
+
+Auf Seite 1 öffnet **⚙ Lager einrichten** die Einstellungen: Lager A–D einzeln ein- oder ausblenden, 6, 12 oder 18 Fächer wählen,
+Namen vergeben und die Anzahl der AMS (0–3) festlegen. Lager mit belegten Fächern lassen sich nicht ausblenden oder verkleinern.
+Ausgebaute AMS-Spulen legt der Abgleich in Lager D (wenn eingeblendet), sonst ins Hauptlager.
+
 ## Benutzung
 
 Nach dem Start erscheint **Filament** in der Seitenleiste. Der Zugriff darüber ist durch Home Assistant geschützt.
@@ -31,7 +37,7 @@ Pro AMS-Fach steht, was der Drucker meldet (Material, Farbe), daneben die Spule,
 - **Steckt jetzt hier:** Eine Spule mit bekannter Kennung wurde in ein anderes Fach gesteckt. Ein Klick verschiebt sie (ist das Fach belegt, tauschen beide Spulen die Plätze).
 - **Weicht ab / Nicht in der App:** Die App schlägt passende Spulen aus Regal oder Lager vor (gleiches Material, ähnliche Farbe) oder legt die Spule aus den Live-Daten neu an.
 - **Farbname aus dem Code:** Der Drucker liefert den Hex-Code der Spule. Daraus erzeugt die App den Farbnamen: zuerst so, wie du dieselbe Farbe (gleicher Hersteller, gleiche Sorte) schon in deinen Spulen benennst, sonst nach den offiziellen Bambu-Tabellen (z. B. `#5B6579` = Blue Gray) für PLA Basic und PLA Matte. Ist der Code noch nicht in der Tabelle, steht „Farbname fehlt" und die Spule wird **manuell angelegt** (Formular wird vorausgefüllt). Weicht der Hex-Code einer App-Spule sichtbar vom AMS ab (auch bei Spulen mit gemerkter Kennung), setzt „Farbe übernehmen" den Wert aus dem AMS.
-- **Ausgebaute Spulen** legt die App automatisch ins **Lager D** (12 Plätze für angefangene Spulen), bei vollem Lager D ins Hauptlager.
+- **Ausgebaute Spulen** legt die App automatisch ins **Lager D** (Fächerzahl wie eingestellt), bei vollem oder ausgeblendetem Lager D ins Hauptlager.
 - **Vorschläge übernehmen** führt alle eindeutigen Vorschläge nach Rückfrage aus. Es wird nie etwas ohne deinen Klick geändert.
 - Spulen ohne RFID (Fremdhersteller) werden über Material und Farbe verglichen. Das Restgewicht übernimmt die App nicht, die P1S-AMS melden es nicht.
 

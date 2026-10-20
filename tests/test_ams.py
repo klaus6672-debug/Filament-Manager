@@ -286,3 +286,56 @@ def test_known_tag_with_visibly_different_color_offers_color_fix(client):
     # kleine Abweichung (ΔE <= 10) wird nicht bemängelt
     put(client, "AMS-2-1", "PLA Basic", "#f6ee3a", color_name="Yellow")
     assert tray(client, "AMS-2-1")["status"] == "ok"
+
+
+# ---------------------------------------------------------------- Aufbau (Lager A–D, Anzahl AMS)
+
+def layout_body(**changes):
+    body = {"racks": {"A": {"enabled": True, "slots": 18, "name": "Regal A"}, "B": {"enabled": True, "slots": 6, "name": "Regal B"},
+                      "C": {"enabled": True, "slots": 6, "name": "Regal C"}, "D": {"enabled": True, "slots": 12, "name": ""}},
+            "ams_units": 3}
+    for key, value in changes.items():
+        if key in body["racks"]:
+            body["racks"][key].update(value)
+        else:
+            body[key] = value
+    return body
+
+
+def test_layout_defaults_and_saving(client):
+    d = client.get("/api/layout").json()
+    assert [(r, d["racks"][r]["enabled"], d["racks"][r]["slots"]) for r in "ABCD"] == [("A", True, 18), ("B", True, 6), ("C", True, 6), ("D", True, 12)]
+    assert d["ams_units"] == 3 and d["slot_options"] == [6, 12, 18]
+    r = client.post("/api/layout", json=layout_body(B={"enabled": False}, C={"slots": 12, "name": "Schrank"}, ams_units=1))
+    assert r.status_code == 200
+    d = client.get("/api/layout").json()
+    assert d["racks"]["B"]["enabled"] is False and d["racks"]["C"]["slots"] == 12 and d["racks"]["C"]["name"] == "Schrank"
+    assert d["racks"]["D"]["name"] == "Lager D · Angefangene Spulen"          # leerer Name -> Standardname
+    assert d["ams_units"] == 1 and len(client.get("/api/ams").json()["units"]) == 1
+
+
+def test_layout_rejects_invalid_values_and_never_hides_occupied_slots(client):
+    assert client.post("/api/layout", json=layout_body(A={"slots": 9})).status_code == 422          # nur 6/12/18
+    assert client.post("/api/layout", json={"racks": {"A": {"enabled": True, "slots": 6}}, "ams_units": 3}).status_code == 422
+    put(client, "A14", "PLA", "#111111")
+    r = client.post("/api/layout", json=layout_body(A={"slots": 12}))                                # A14 läge außerhalb
+    assert r.status_code == 409 and "A14" in r.json()["error"]
+    put(client, "B2", "PLA", "#111111")
+    assert client.post("/api/layout", json=layout_body(B={"enabled": False})).status_code == 409    # belegtes Lager ausblenden
+    put(client, "AMS-3-1", "PLA", "#111111")
+    assert client.post("/api/layout", json=layout_body(ams_units=2)).status_code == 409
+    assert client.post("/api/layout", json=layout_body(A={"slots": 18})).status_code == 200          # unverändert ist erlaubt
+    assert client.get("/api/layout").json()["racks"]["A"]["slots"] == 18
+
+
+def test_parking_follows_the_layout(client):
+    put(client, "AMS-3-1", "PLA", "#dcf478")
+    client.post("/api/layout", json=layout_body(D={"slots": 6}))
+    for i in range(6):
+        put(client, f"D{i}", "PLA", "#222222")
+    assert client.post("/api/ams/apply", json={"slot": "AMS-3-1", "kind": "park"}).json()["parked_to"] == "H0"   # D (6 Fächer) voll
+    put(client, "AMS-3-1", "PLA", "#dcf478")
+    for i in range(6):
+        client.delete(f"/api/slots/D{i}")
+    client.post("/api/layout", json=layout_body(D={"enabled": False}))
+    assert client.post("/api/ams/apply", json={"slot": "AMS-3-1", "kind": "park"}).json()["parked_to"] == "H1"   # D ausgeblendet

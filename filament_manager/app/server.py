@@ -10,6 +10,8 @@ Liefert die App (static/) aus und stellt eine kleine JSON-API bereit:
     GET    /api/ams            Live-Abgleich: AMS-Fächer aus Home Assistant gegen die Slots AMS-n-m
     POST   /api/ams/apply      Abgleich-Vorschlag übernehmen (Kennung merken / verschieben / neu anlegen)
     POST   /api/ams/map        Zuordnung "AMS n der App" -> "AMS in Home Assistant" speichern
+    GET    /api/layout         Aufbau: Lager A–D (an/aus, 6/12/18 Fächer, Name) und Anzahl AMS
+    POST   /api/layout         Aufbau speichern (belegte Slots dürfen nicht ausgeblendet werden)
     GET    /api/health         Lebenszeichen (immer ohne Passwort erreichbar)
 
 Konfiguration über Umgebungsvariablen:
@@ -337,7 +339,7 @@ def build_ams(states, conn):
     outside = [s for s in spools.values() if not AMS_SLOT_RE.match(s["slot"])]
 
     result = []
-    for unit in AMS_UNITS:
+    for unit in AMS_UNITS[:load_layout(conn)["ams_units"]]:
         ha_name = mapping.get(unit)
         trays = []
         for pos in range(1, 5):
@@ -417,6 +419,71 @@ def build_ams(states, conn):
             ]
         result.append({"unit": unit, "ha_name": ha_name, "trays": trays})
     return {"available": True, "units": result, "ha_units": unit_order(list(units))}
+
+
+# ---------------------------------------------------------------- Aufbau (Lager A–D, Anzahl AMS)
+
+RACK_IDS = ("A", "B", "C", "D")
+SLOT_OPTIONS = (6, 12, 18)
+DEFAULT_LAYOUT = {
+    "racks": {
+        "A": {"enabled": True, "slots": 18, "name": "Regal A"},
+        "B": {"enabled": True, "slots": 6, "name": "Regal B"},
+        "C": {"enabled": True, "slots": 6, "name": "Regal C"},
+        "D": {"enabled": True, "slots": 12, "name": "Lager D · Angefangene Spulen"},
+    },
+    "ams_units": 3,
+}
+
+
+def load_layout(conn):
+    """Gespeicherten Aufbau lesen; fehlende oder ungültige Werte werden durch die Standardwerte ersetzt."""
+    try:
+        saved = json.loads(get_setting(conn, "layout", "{}"))
+    except ValueError:
+        saved = {}
+    layout = {"racks": {}, "ams_units": DEFAULT_LAYOUT["ams_units"]}
+    for rid in RACK_IDS:
+        base, mine = DEFAULT_LAYOUT["racks"][rid], (saved.get("racks") or {}).get(rid) or {}
+        slots = mine.get("slots")
+        layout["racks"][rid] = {
+            "enabled": bool(mine.get("enabled", base["enabled"])),
+            "slots": slots if slots in SLOT_OPTIONS else base["slots"],
+            "name": (str(mine.get("name") or "").strip()[:40]) or base["name"],
+        }
+    units = saved.get("ams_units")
+    if isinstance(units, int) and 0 <= units <= len(AMS_UNITS):
+        layout["ams_units"] = units
+    return layout
+
+
+class RackIn(BaseModel):
+    enabled: bool = True
+    slots: int = Field(default=12)
+    name: str = Field(default="", max_length=40)
+
+
+class LayoutIn(BaseModel):
+    racks: dict[str, RackIn]
+    ams_units: int = Field(default=3, ge=0, le=3)
+
+
+def layout_conflicts(conn, layout):
+    """Belegte Slots, die durch den neuen Aufbau nicht mehr sichtbar wären."""
+    blocked = []
+    for row in conn.execute("SELECT slot FROM filaments").fetchall():
+        slot = row["slot"]
+        m = re.fullmatch(r"([A-D])(\d+)", slot)
+        if m:
+            cfg = layout["racks"][m.group(1)]
+            if not cfg["enabled"] or int(m.group(2)) >= cfg["slots"]:
+                blocked.append(slot)
+            continue
+        m = AMS_SLOT_RE.match(slot)
+        if m and int(m.group(1)) > layout["ams_units"]:
+            blocked.append(slot)
+    return sorted(blocked)
+
 
 
 # ---------------------------------------------------------------- App
@@ -570,13 +637,12 @@ def _live_tray(slot, conn):
     return units.get(name, {}).get(pos)
 
 
-PARK_AREAS = (("D", 12), ("H", 120))  # zuerst Lager D (angefangene Spulen), wenn voll das Hauptlager
-
-
 def _free_storage_slot(conn):
-    """Erster freier Platz zum Auslagern: Lager D0 … D11, danach Hauptlager H0 … H119."""
+    """Erster freier Platz zum Auslagern: Lager D (falls eingeblendet, mit eingestellter Fächerzahl), danach Hauptlager H0 … H119."""
     used = {r["slot"] for r in conn.execute("SELECT slot FROM filaments").fetchall()}
-    return next((f"{p}{i}" for p, n in PARK_AREAS for i in range(n) if f"{p}{i}" not in used), None)
+    rack_d = load_layout(conn)["racks"]["D"]
+    areas = ([("D", rack_d["slots"])] if rack_d["enabled"] else []) + [("H", 120)]
+    return next((f"{p}{i}" for p, n in areas for i in range(n) if f"{p}{i}" not in used), None)
 
 
 def _clear_tag(conn, tag, keep_slot):
@@ -690,6 +756,43 @@ def ams_map(item: AmsMapIn):
             saved = {}
         saved[str(item.unit)] = item.name
         conn.execute("INSERT OR REPLACE INTO settings(key, value) VALUES ('ams_map', ?)", (json.dumps(saved),))
+    return {"ok": True}
+
+
+@app.get("/api/layout")
+def get_layout():
+    with db() as conn:
+        layout = load_layout(conn)
+    layout["slot_options"] = list(SLOT_OPTIONS)
+    return layout
+
+
+@app.post("/api/layout")
+def set_layout(item: LayoutIn):
+    if set(item.racks) != set(RACK_IDS):
+        return JSONResponse({"error": "Es müssen genau die Lager A, B, C und D angegeben werden."}, status_code=422)
+    if any(r.slots not in SLOT_OPTIONS for r in item.racks.values()):
+        return JSONResponse({"error": "Erlaubt sind 6, 12 oder 18 Fächer."}, status_code=422)
+    layout = {
+        "racks": {
+            rid: {
+                "enabled": item.racks[rid].enabled,
+                "slots": item.racks[rid].slots,
+                "name": item.racks[rid].name.strip() or DEFAULT_LAYOUT["racks"][rid]["name"],
+            }
+            for rid in RACK_IDS
+        },
+        "ams_units": item.ams_units,
+    }
+    with db() as conn:
+        blocked = layout_conflicts(conn, layout)
+        if blocked:
+            shown = ", ".join(blocked[:8]) + (" …" if len(blocked) > 8 else "")
+            return JSONResponse(
+                {"error": f"Nicht möglich: {len(blocked)} belegte Slots wären nicht mehr sichtbar ({shown}). Bitte zuerst verschieben."},
+                status_code=409,
+            )
+        conn.execute("INSERT OR REPLACE INTO settings(key, value) VALUES ('layout', ?)", (json.dumps(layout),))
     return {"ok": True}
 
 

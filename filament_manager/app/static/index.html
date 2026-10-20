@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Filament Manager – Holz + AMS</title>
+<title>Filament Manager</title>
 
 <link rel="manifest" href="manifest.webmanifest" crossorigin="use-credentials">
 <meta name="theme-color" content="#1a1f28">
@@ -673,6 +673,22 @@ letter-spacing:1px;
 .slot.ams-ok{box-shadow:0 0 0 2px #2ecc71 inset}
 .slot.ams-warn{box-shadow:0 0 0 2px #ffb341 inset}
 @media (max-width:760px){.ams-row{grid-template-columns:1fr 1fr}.ams-row .ams-act{grid-column:1 / -1}}
+
+/* ---------- Lager-Aufbau ---------- */
+.rack-area{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin:26px 0}
+.rack-area:empty{display:none}
+.rack-area .wood-rack{margin:0}
+.rack-area .rack-card.wide{grid-column:1 / -1}
+.grid-s6{grid-template-columns:repeat(3, minmax(95px,1fr))}
+.grid-s12,.grid-s18{grid-template-columns:repeat(6, minmax(95px,1fr))}
+.layout-panel{margin-top:12px;padding:14px;border:1px solid var(--line);border-radius:12px;background:rgba(255,255,255,.04)}
+.layout-panel[hidden]{display:none}
+.layout-row{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;margin-bottom:10px;font-size:14px}
+.layout-row label{display:flex;align-items:center;gap:8px;min-width:70px;font-weight:700}
+.layout-row input[type=text],.layout-row select,.layout-panel select{padding:8px 10px;border-radius:10px;border:1px solid var(--line);background:#263244;color:var(--text);font:inherit;min-width:0}
+.layout-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.layout-note{color:var(--muted);font-size:12px;margin-top:8px}
+@media (max-width: 1050px){.rack-area{grid-template-columns:1fr}.grid-s6,.grid-s12,.grid-s18{grid-template-columns:repeat(2,1fr)}}
 </style>
 </head>
 <body>
@@ -685,7 +701,7 @@ letter-spacing:1px;
                     <div class="brand-badge">🧵</div>
                     <div>
                         <div class="panel-title">Filament Manager</div>
-                        <div class="brand-sub">Holzregal + AMS Oberfläche</div>
+                        <div class="brand-sub">Filamentlager + AMS</div>
                     </div>
                 </div>
                 <div class="status-pill" id="statusPill">Verbinde …</div>
@@ -767,12 +783,12 @@ letter-spacing:1px;
 
                 <div class="kpis">
                     <div class="kpi">
-                        <div class="kpi-label">Regale</div>
-                        <div class="kpi-value">3 + AMS</div>
+                        <div class="kpi-label">Lager + AMS</div>
+                        <div class="kpi-value" id="kpiRacks">–</div>
                     </div>
                     <div class="kpi">
                         <div class="kpi-label">Slots gesamt</div>
-                        <div class="kpi-value">162</div>
+                        <div class="kpi-value" id="kpiSlots">–</div>
                     </div>
                     <div class="kpi">
                         <div class="kpi-label">Spulen</div>
@@ -784,55 +800,16 @@ letter-spacing:1px;
                     </div>
                 </div>
 
-                <div class="hint">Seite 1 enthält Regal A, B, C, Lager D (angefangene Spulen) und 3 AMS. Seite 2 enthält das Hauptlager.</div>
+                <div class="hint">Seite 1 zeigt die eingeblendeten Lager und AMS, Seite 2 das Hauptlager.</div>
+                <button type="button" class="navbtn" id="layoutBtn" onclick="toggleLayoutPanel()">⚙ Lager einrichten</button>
+                <div id="layoutPanel" class="layout-panel" hidden></div>
                 <div class="hint">Aktueller Slot: <strong id="currentSlot">–</strong></div>
             </div>
         </div>
     </div>
 
     <div id="page-main" class="page active">
-        <div class="wood-rack">
-            <div class="rack-head">
-                <div>
-                    <div class="rack-title">Billy Eiche-Hell · Regal A</div>
-                    <div class="rack-sub">18 Plätze</div>
-                </div>
-                <div class="small-note">Holzoptik</div>
-            </div>
-            <div id="gridA" class="grid grid-a"></div>
-        </div>
-
-        <div class="rack-row">
-            <div class="wood-rack" style="margin-bottom:0;">
-                <div class="rack-head">
-                    <div>
-                        <div class="rack-title">Regal B</div>
-                        <div class="rack-sub">6 Plätze</div>
-                    </div>
-                </div>
-                <div id="gridB" class="grid grid-b"></div>
-            </div>
-
-            <div class="wood-rack" style="margin-bottom:0;">
-                <div class="rack-head">
-                    <div>
-                        <div class="rack-title">Regal C</div>
-                        <div class="rack-sub">6 Plätze</div>
-                    </div>
-                </div>
-                <div id="gridC" class="grid grid-c"></div>
-            </div>
-        </div>
-
-        <div class="wood-rack">
-            <div class="rack-head">
-                <div>
-                    <div class="rack-title">Lager D · Angefangene Spulen</div>
-                    <div class="rack-sub">12 Plätze · hierhin räumt der AMS-Abgleich ausgebaute Spulen</div>
-                </div>
-            </div>
-            <div id="gridD" class="grid grid-d"></div>
-        </div>
+        <div id="rackArea" class="rack-area"></div>
 
         <div class="ams-wrap">
             <div class="ams-box">
@@ -2609,22 +2586,108 @@ async function setAmsMap(unit, name){
     loadAms();
 }
 
+
+/* ---------- Aufbau: Lager A–D ein-/ausblenden, 6/12/18 Fächer, Namen, Anzahl AMS ---------- */
+const RACK_IDS = ["A", "B", "C", "D"];
+const DEFAULT_LAYOUT = {
+    racks: {
+        A: {enabled: true, slots: 18, name: "Regal A"},
+        B: {enabled: true, slots: 6, name: "Regal B"},
+        C: {enabled: true, slots: 6, name: "Regal C"},
+        D: {enabled: true, slots: 12, name: "Lager D · Angefangene Spulen"}
+    },
+    ams_units: 3
+};
+let layoutData = JSON.parse(JSON.stringify(DEFAULT_LAYOUT));
+
+async function loadLayout(){
+    try{
+        const res = await fetch("api/layout", {cache: "no-store"});
+        if(!res.ok) throw new Error("HTTP " + res.status);
+        layoutData = await res.json();
+        try{ localStorage.setItem("fm_layout", JSON.stringify(layoutData)); }catch(e){}
+    }catch(e){
+        try{
+            const cached = JSON.parse(localStorage.getItem("fm_layout") || "null");
+            if(cached && cached.racks) layoutData = cached;
+        }catch(err){}
+    }
+}
+
+function renderRacks(){
+    const area = document.getElementById("rackArea");
+    area.innerHTML = "";
+    let slotTotal = 120;  // Hauptlager
+    let racks = 0;
+    RACK_IDS.forEach(id => {
+        const cfg = layoutData.racks[id];
+        if(!cfg || !cfg.enabled) return;
+        racks++;
+        slotTotal += cfg.slots;
+        const card = document.createElement("div");
+        card.className = "wood-rack rack-card" + (cfg.slots > 6 ? " wide" : "");
+        card.innerHTML = `<div class="rack-head"><div><div class="rack-title">${amsEsc(cfg.name)}</div><div class="rack-sub">${cfg.slots} Plätze</div></div></div><div id="grid${id}" class="grid grid-s${cfg.slots}"></div>`;
+        area.appendChild(card);
+        buildSlots("grid" + id, id, cfg.slots);
+    });
+    for(let n = 1; n <= 3; n++){
+        const box = document.getElementById("gridAMS" + n).parentElement;
+        box.style.display = n <= layoutData.ams_units ? "" : "none";
+        if(n <= layoutData.ams_units) buildAMS("gridAMS" + n, n);
+    }
+    const wrap = document.querySelector(".ams-wrap");
+    if(wrap) wrap.style.display = layoutData.ams_units ? "" : "none";
+    document.getElementById("kpiRacks").textContent = racks + " + " + layoutData.ams_units + " AMS";
+    document.getElementById("kpiSlots").textContent = slotTotal;
+}
+
+function toggleLayoutPanel(){
+    const panel = document.getElementById("layoutPanel");
+    if(!panel.hidden){ panel.hidden = true; return; }
+    const opts = (sel) => [6, 12, 18].map(n => `<option value="${n}"${n === sel ? " selected" : ""}>${n} Fächer</option>`).join("");
+    let html = "";
+    RACK_IDS.forEach(id => {
+        const c = layoutData.racks[id];
+        html += `<div class="layout-row">
+            <label><input type="checkbox" id="lay-en-${id}"${c.enabled ? " checked" : ""}> ${id}</label>
+            <input type="text" id="lay-name-${id}" value="${amsEsc(c.name)}" maxlength="40" placeholder="Name">
+            <select id="lay-slots-${id}">${opts(c.slots)}</select></div>`;
+    });
+    html += `<div class="layout-row"><label>AMS</label>
+        <span class="layout-note" style="margin:0">Anzahl angezeigter AMS</span>
+        <select id="lay-ams">${[0, 1, 2, 3].map(n => `<option value="${n}"${n === layoutData.ams_units ? " selected" : ""}>${n}</option>`).join("")}</select></div>`;
+    html += `<div class="layout-actions"><button type="button" class="action" onclick="saveLayout()">Speichern</button>
+        <button type="button" class="label-secondary" onclick="toggleLayoutPanel()">Abbrechen</button></div>
+        <div class="layout-note">Lager mit belegten Fächern lassen sich nicht ausblenden oder verkleinern: Spulen vorher verschieben. Ausgebaute AMS-Spulen kommen ins Lager D (wenn eingeblendet), sonst ins Hauptlager.</div>`;
+    panel.innerHTML = html;
+    panel.hidden = false;
+}
+
+async function saveLayout(){
+    const racks = {};
+    RACK_IDS.forEach(id => {
+        racks[id] = {
+            enabled: document.getElementById("lay-en-" + id).checked,
+            slots: parseInt(document.getElementById("lay-slots-" + id).value, 10),
+            name: document.getElementById("lay-name-" + id).value.trim()
+        };
+    });
+    const {ok, data} = await apiSend("POST", "api/layout", {racks, ams_units: parseInt(document.getElementById("lay-ams").value, 10)});
+    if(!ok){ alert(data.error || "Speichern fehlgeschlagen."); return; }
+    window.location.reload();
+}
+
 async function boot(){
+await loadLayout();
 await loadSlots();
 const count = Object.keys(slotsData).length;
 const weight = Object.values(slotsData).reduce((s, x) => s + (parseInt(x.weight, 10) || 0), 0);
 document.getElementById("kpiCount").textContent = count;
 document.getElementById("kpiWeight").textContent = weight + " g";
 
-buildSlots("gridA", "A", 18);
-buildSlots("gridB", "B", 6);
-buildSlots("gridC", "C", 6);
-buildSlots("gridD", "D", 12);
+renderRacks();
 slotsDataSorted = sortSlotsByMaterialAndColor(slotsData);
 buildSortedStorage("gridH", "H", 120);
-buildAMS("gridAMS1", 1);
-buildAMS("gridAMS2", 2);
-buildAMS("gridAMS3", 3);
 
 updateEmptySpoolWeight();
 updateNetFilamentWeight();
