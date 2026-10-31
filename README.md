@@ -112,3 +112,12 @@ Bei Änderungen an der Oberfläche in `static/sw.js` die Zahl `VERSION` erhöhen
 
 - Mehrere Personen gleichzeitig: Pro Slot gilt die zuletzt gespeicherte Änderung, Konflikte werden nicht gemeldet.
 - Offline wird nur gelesen, nicht geschrieben.
+
+## Scannen ohne HTTPS
+
+Der Browser erlaubt die **Live-Kamera** nur über HTTPS (oder `localhost`). Im Home Assistant über `http://` ist sie gesperrt.
+Der Filament Manager erkennt das automatisch und bietet statt der Live-Kamera den Button **„QR-Code fotografieren“** an: Er öffnet die normale Handy-Kamera und liest den QR-Code aus dem Foto. Das funktioniert auch über HTTP, ohne Einrichtung.
+
+Wer die Live-Kamera möchte, hat diese Möglichkeiten:
+- HA oder den Filament Manager über HTTPS aufrufen (Nabu Casa, eigene Domain mit Nginx Proxy Manager, oder die Docker-Variante mit Caddy unter `https://<IP>:8443`).
+- Nur zum Testen in Chrome: `chrome://flags/#unsafely-treat-insecure-origin-as-secure` öffnen, die Adresse eintragen und auf „Enabled“ stellen.

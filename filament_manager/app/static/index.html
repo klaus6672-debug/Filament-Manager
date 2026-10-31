@@ -1642,11 +1642,82 @@ function applyDefaultWeightForSlot(slotValue){
         }
     }
 }
+/* ---------- Foto-Scan: funktioniert auch ohne HTTPS (der Browser sperrt nur den Live-Stream) ---------- */
+function downscaleImage(file, maxSide){
+    return new Promise((resolve) => {
+        const img = new Image();
+        const url = URL.createObjectURL(file);
+        img.onload = () => {
+            const k = Math.min(1, maxSide / Math.max(img.width, img.height));
+            const c = document.createElement("canvas");
+            c.width = Math.round(img.width * k);
+            c.height = Math.round(img.height * k);
+            c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+            URL.revokeObjectURL(url);
+            c.toBlob(b => resolve(b ? new File([b], "scan.jpg", {type: "image/jpeg"}) : file), "image/jpeg", 0.92);
+        };
+        img.onerror = () => { URL.revokeObjectURL(url); resolve(file); };
+        img.src = url;
+    });
+}
+
+function startPhotoScan(onDecoded, setScanStatus){
+    const reader = document.getElementById("reader");
+    reader.innerHTML = "";
+
+    const note = document.createElement("div");
+    note.style.cssText = "font-size:13px; line-height:1.4; margin:8px 0; opacity:.85;";
+    note.textContent = "Live-Kamera ist nur über HTTPS erlaubt. Stattdessen: QR-Code mit der Handy-Kamera fotografieren, die App liest ihn aus dem Foto.";
+    reader.appendChild(note);
+
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/*";
+    input.setAttribute("capture", "environment");
+    input.style.display = "none";
+    reader.appendChild(input);
+
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "scan";
+    btn.textContent = "📷 QR-Code fotografieren";
+    btn.onclick = () => input.click();
+    reader.appendChild(btn);
+
+    const hidden = document.createElement("div");
+    hidden.id = "photoScanTmp";
+    hidden.style.display = "none";
+    reader.appendChild(hidden);
+
+    input.onchange = async () => {
+        const file = input.files && input.files[0];
+        if(!file) return;
+        setScanStatus("Foto wird gelesen …");
+        try{
+            const small = await downscaleImage(file, 1600);
+            const scanner = new Html5Qrcode("photoScanTmp");
+            let text;
+            try{
+                text = await scanner.scanFile(small, false);
+            }catch(e){
+                text = await scanner.scanFile(file, false);
+            }
+            onDecoded(text);
+        }catch(e){
+            setScanStatus("Kein QR-Code im Foto erkannt. Bitte näher ran, gerade und scharf fotografieren, dann erneut versuchen.");
+        }
+        input.value = "";
+    };
+
+    setScanStatus("Foto-Modus: Button tippen und den QR-Code fotografieren.");
+    input.click();
+}
+
 function cameraProblem(err){
     const name = (err && (err.name || err.message || String(err))) || "unbekannt";
     const n = String(name);
     if(!window.isSecureContext){
-        return "Die Seite ist nicht über HTTPS geöffnet (" + location.protocol + "//" + location.host + "). Der Browser sperrt die Kamera deshalb. Bitte die Adresse mit https:// und dem HTTPS-Port (z. B. https://192.168.1.50:8443) öffnen.";
+        return "Die Seite ist nicht über HTTPS geöffnet (" + location.protocol + "//" + location.host + "). Der Browser sperrt die Live-Kamera deshalb. Nutze den Foto-Scan oder öffne die Adresse mit https:// (z. B. https://192.168.1.50:8443).";
     }
     if(/NotAllowed|Permission/i.test(n)){
         return "Der Zugriff auf die Kamera ist blockiert. Im Browser auf das Schloss-/Einstellungssymbol neben der Adresse tippen → Berechtigungen → Kamera → Erlauben. (Android: Einstellungen → Apps → Browser → Berechtigungen → Kamera.)";
@@ -1660,10 +1731,7 @@ function startScanner(){
     const reader = document.getElementById("reader");
     reader.innerHTML = "";
 
-    if(!window.isSecureContext || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
-        alert(cameraProblem());
-        return;
-    }
+    const livePossible = window.isSecureContext && navigator.mediaDevices && navigator.mediaDevices.getUserMedia;
 
     const lockedSlot = document.getElementById("location").value || selectedSlot;
 
@@ -1774,6 +1842,12 @@ function startScanner(){
 
                 html5QrCode.stop().catch(() => {});
     };
+
+    if(!livePossible){
+        html5QrCode = { stop: () => Promise.resolve() };  // kein Live-Stream, der gestoppt werden müsste
+        startPhotoScan(onDecoded, setScanStatus);
+        return;
+    }
 
     startWith({ facingMode: "environment" }, onDecoded).catch(firstErr => {
         // Berechtigung verweigert: nicht erneut versuchen, sondern erklären
