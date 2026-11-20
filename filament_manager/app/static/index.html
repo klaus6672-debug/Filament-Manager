@@ -715,12 +715,16 @@ letter-spacing:1px;
                         <option selected>PLA Basic</option>
                         <option>PLA Silk</option>
                         <option>PLA Matte</option>
+                        <option>PLA Translucent</option>
+                        <option>PLA Tough+</option>
                         <option>PLA+</option>
                         <option>PETG</option>
-			<option>PETG HF</option>
-			<option>ABS</option>
-			<option>ASA</option>
+                        <option>PETG HF</option>
+                        <option>PETG Matte</option>
+                        <option>ABS</option>
+                        <option>ASA</option>
                         <option>TPU</option>
+                        <option>PVA</option>
                     </select>
 
                     <div style="display:flex; gap:8px;">
@@ -1362,11 +1366,16 @@ const filamentMetersPerKg = {
     "PLA Basic": 335,
     "PLA Matte": 335,
     "PLA Silk": 335,
+    "PLA Translucent": 335,
+    "PLA Tough+": 335,
+    "PLA+": 335,
     "PETG": 330,
     "PETG HF": 330,
+    "PETG Matte": 330,
     "ABS": 350,
     "ASA": 350,
-    "TPU": 340
+    "TPU": 340,
+    "PVA": 340
 };
 function calculateFilamentMeters(item){
     const weight = parseInt(item.weight || 0,10) || 0;
@@ -2427,11 +2436,16 @@ function buildSortedStorage(containerId, prefix, count){
                 "pla basic": 2,
                 "pla matte": 3,
                 "pla silk": 4,
-                "petg": 5,
-                "petg hf": 6,
-                "abs": 7,
-                "asa": 8,
-                "tpu": 9
+                "pla translucent": 5,
+                "pla tough+": 6,
+                "pla+": 7,
+                "petg": 8,
+                "petg hf": 9,
+                "petg matte": 10,
+                "abs": 11,
+                "asa": 12,
+                "tpu": 13,
+                "pva": 14
             };
 
             const rankA = materialOrder[materialA] || 999;
