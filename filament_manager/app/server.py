@@ -143,6 +143,11 @@ COLOR_NAME_SAME = 5  # Farbabstand, bis zu dem ein vorhandener Spulenname für d
 # Der Drucker liefert den exakten Hex-Code der Spule; daraus wird der Farbname erzeugt. Bei Bambu gilt diese Tabelle zuerst,
 # sonst (und bei Farben, die hier fehlen) die Namen, die du in deinem Bestand schon verwendest. Unbekannter Code -> manuelle Anlage.
 BAMBU_COLORS = {
+    "tough+": {"#FFFFFF": "White", "#AFB1AE": "Gray", "#000000": "Black", "#959698": "Silver", "#F4D53F": "Yellow",
+               "#009BD8": "Cyan", "#DC3A27": "Orange"},
+    "translucent": {"#009FA1": "Teal", "#96D8AF": "Light Jade", "#0047BB": "Blue", "#F5DBAB": "Mellow Yellow",
+                    "#8344B0": "Purple", "#F5B6CD": "Cherry Pink", "#F74E02": "Orange", "#B8CDE9": "Ice Blue",
+                    "#B50011": "Red", "#B8ACD6": "Lavender"},
     "silk": {"#FFC600": "Silk Gold", "#97999B": "Silk Silver", "#5E4B3C": "Silk Copper", "#147BD1": "Silk Blue"},
     "basic": {
         "#FFFFFF": "Jade White", "#EC008C": "Magenta", "#E4BD68": "Gold", "#3F8E43": "Mistletoe Green", "#C12E1F": "Red",
